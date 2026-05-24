@@ -27,6 +27,8 @@ class VoiceSetupActivity : AppCompatActivity() {
         binding = ActivityVoiceSetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val firstRun = intent.getBooleanExtra(EXTRA_FIRST_RUN, false)
+        binding.voiceSetupSkip.visibility = if (firstRun) View.VISIBLE else View.GONE
         binding.voiceSetupSkip.setOnClickListener {
             VoicePreferences.markSetupDone(this)
             finish()
@@ -82,11 +84,20 @@ class VoiceSetupActivity : AppCompatActivity() {
         val enginePkg = VoicePreferences.enginePackage(this)
         if (enginePkg == null) {
             binding.voiceSetupVoicesHeader.text = ""
+            binding.voiceSetupEngineSpeakersNote.visibility = View.GONE
+            binding.voiceSetupOpenEngine.visibility = View.GONE
             binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
             binding.voiceSetupVoices.removeAllViews()
             return
         }
-        binding.voiceSetupVoicesHeader.text = getString(R.string.voice_setup_voices_for, engineLabel(enginePkg))
+        val label = engineLabel(enginePkg)
+        binding.voiceSetupVoicesHeader.text = getString(R.string.voice_setup_voices_for, label)
+        binding.voiceSetupEngineSpeakersNote.visibility = View.VISIBLE
+        binding.voiceSetupOpenEngine.apply {
+            visibility = View.VISIBLE
+            text = getString(R.string.voice_setup_open_engine_settings, label)
+            setOnClickListener { openEngineSettings(enginePkg, label) }
+        }
         binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
         binding.voiceSetupVoices.removeAllViews()
 
@@ -205,6 +216,21 @@ class VoiceSetupActivity : AppCompatActivity() {
         }
         val sample = getString(R.string.voice_setup_sample_sentence)
         tts.speak(sample, TextToSpeech.QUEUE_FLUSH, null, "sample")
+    }
+
+    private fun openEngineSettings(pkg: String, label: String) {
+        val intent = packageManager.getLaunchIntentForPackage(pkg)
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } else {
+            // Fallback: open the Android system TTS settings page.
+            runCatching {
+                startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+            }.onFailure {
+                Toast.makeText(this, getString(R.string.voice_setup_open_engine_failed, label), Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun engineLabel(pkg: String): String {

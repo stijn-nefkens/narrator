@@ -50,6 +50,7 @@
 
     <!-- Player extra -->
     <string name="player_speed_format">%1$.2fx</string>
+    <string name="player_synthesising">Synthesising…</string>
     <string name="player_prev_chapter">Previous chapter</string>
     <string name="player_next_chapter">Next chapter</string>
     <string name="player_prev_step">Previous step</string>
@@ -68,6 +69,9 @@
     <string name="voice_setup_voices_default">Engine default</string>
     <string name="voice_setup_no_engine_picked">Pick an engine above to see its available voices.</string>
     <string name="voice_setup_voice_label">%1$s · %2$s</string>
+    <string name="voice_setup_engine_speakers_note">Some engines (such as sherpa-onnx / Kokoro) expose only one Android voice per language and let you pick the speaker ID inside their own settings.</string>
+    <string name="voice_setup_open_engine_settings">Open %1$s settings</string>
+    <string name="voice_setup_open_engine_failed">Couldn\'t open %1$s — no launch intent.</string>
 
     <!-- Notification -->
     <string name="notification_channel_playback">Playback</string>

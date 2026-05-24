@@ -18,128 +18,163 @@
         android:visibility="gone" />
 
     <!-- Loaded state -->
-    <LinearLayout
+    <ScrollView
         android:id="@+id/player_loaded"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:padding="16dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/player_cover"
-            android:layout_width="180dp"
-            android:layout_height="240dp"
-            android:layout_marginTop="8dp"
-            android:scaleType="fitCenter"
-            android:contentDescription="@string/nav_player"
-            android:src="@drawable/ic_book_placeholder" />
-
-        <TextView
-            android:id="@+id/player_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textAppearance="?attr/textAppearanceHeadline6"
-            android:gravity="center"
-            tools:text="A Tale" />
-
-        <TextView
-            android:id="@+id/player_author"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textAppearance="?attr/textAppearanceSubtitle1"
-            tools:text="Jane Doe" />
-
-        <TextView
-            android:id="@+id/player_chapter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textAppearance="?attr/textAppearanceCaption"
-            android:gravity="center"
-            tools:text="Chapter 1 of 12 · Down the Rabbit-Hole" />
-
-        <SeekBar
-            android:id="@+id/player_scrub"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
-
-        <TextView
-            android:id="@+id/player_progress_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceCaption"
-            tools:text="34%" />
-
-        <!-- Transport controls -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:padding="16dp">
 
-            <ImageButton
-                android:id="@+id/player_prev_chapter"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_skip_prev"
-                android:contentDescription="@string/player_prev_chapter" />
+            <ImageView
+                android:id="@+id/player_cover"
+                android:layout_width="180dp"
+                android:layout_height="240dp"
+                android:layout_marginTop="8dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/nav_player"
+                android:src="@drawable/ic_book_placeholder" />
 
-            <ImageButton
-                android:id="@+id/player_prev_step"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_step_prev"
-                android:contentDescription="@string/player_prev_step" />
+            <TextView
+                android:id="@+id/player_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:textAppearance="?attr/textAppearanceHeadline6"
+                android:gravity="center"
+                tools:text="A Tale" />
+
+            <TextView
+                android:id="@+id/player_author"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
+                tools:text="Jane Doe" />
+
+            <TextView
+                android:id="@+id/player_chapter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:gravity="center"
+                tools:text="Chapter 1 of 12 · Down the Rabbit-Hole" />
+
+            <SeekBar
+                android:id="@+id/player_scrub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:id="@+id/player_progress_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceCaption"
+                tools:text="34%" />
+
+            <!-- Transport controls -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/player_prev_chapter"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_skip_prev"
+                    android:contentDescription="@string/player_prev_chapter" />
+
+                <ImageButton
+                    android:id="@+id/player_prev_step"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_step_prev"
+                    android:contentDescription="@string/player_prev_step" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_play_pause"
+                    style="@style/Widget.MaterialComponents.Button.Icon"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:layout_marginHorizontal="12dp"
+                    app:icon="@drawable/ic_play"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="40dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:cornerRadius="40dp"
+                    android:contentDescription="@string/player_play"
+                    android:text="" />
+
+                <ImageButton
+                    android:id="@+id/player_next_step"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_step_next"
+                    android:contentDescription="@string/player_next_step" />
+
+                <ImageButton
+                    android:id="@+id/player_next_chapter"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_skip_next"
+                    android:contentDescription="@string/player_next_chapter" />
+            </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/player_play_pause"
-                style="@style/Widget.MaterialComponents.Button.Icon"
-                android:layout_width="80dp"
-                android:layout_height="80dp"
-                android:layout_marginHorizontal="12dp"
-                app:icon="@drawable/ic_play"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconSize="40dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:cornerRadius="40dp"
-                android:contentDescription="@string/player_play"
-                android:text="" />
+                android:id="@+id/player_speed"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                tools:text="1.00x" />
 
-            <ImageButton
-                android:id="@+id/player_next_step"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginEnd="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_step_next"
-                android:contentDescription="@string/player_next_step" />
+            <TextView
+                android:id="@+id/player_synthesising"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/player_synthesising"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:visibility="invisible"
+                tools:visibility="visible" />
 
-            <ImageButton
-                android:id="@+id/player_next_chapter"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_skip_next"
-                android:contentDescription="@string/player_next_chapter" />
+            <!-- Follow-along text: stays at the bottom so the controls above don't reflow. -->
+            <TextView
+                android:id="@+id/player_current_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:textAppearance="?attr/textAppearanceBody1"
+                tools:text="Alice was beginning to get very tired of sitting by her sister." />
+
+            <TextView
+                android:id="@+id/player_next_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:alpha="0.5"
+                android:textAppearance="?attr/textAppearanceBody2"
+                tools:text="So she was considering, in her own mind." />
         </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/player_speed"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            tools:text="1.00x" />
-    </LinearLayout>
+    </ScrollView>
 </FrameLayout>

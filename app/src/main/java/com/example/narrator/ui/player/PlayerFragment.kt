@@ -1,11 +1,19 @@
 package com.example.narrator.ui.player
 
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.BackgroundColorSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +31,23 @@ class PlayerFragment : Fragment() {
     private val container get() = (requireActivity().application as NarratorApp).container
 
     private var scrubbing = false
+    private val highlightHandler = Handler(Looper.getMainLooper())
+    private val highlightTick = object : Runnable {
+        override fun run() {
+            refreshHighlight()
+            if (container.narrator.state.value.isPlaying) {
+                highlightHandler.postDelayed(this, HIGHLIGHT_INTERVAL_MS)
+            }
+        }
+    }
+
+    private val synthesisingHandler = Handler(Looper.getMainLooper())
+    private val showSynthesisingRunnable = Runnable {
+        val state = container.narrator.state.value
+        if (state.isPlaying && state.currentChunkStartedAt == 0L) {
+            _binding?.playerSynthesising?.visibility = View.VISIBLE
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -62,6 +87,8 @@ class PlayerFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        highlightHandler.removeCallbacks(highlightTick)
+        synthesisingHandler.removeCallbacks(showSynthesisingRunnable)
         super.onDestroyView()
         _binding = null
     }
@@ -71,6 +98,7 @@ class PlayerFragment : Fragment() {
         if (loaded == null) {
             binding.playerEmpty.visibility = View.VISIBLE
             binding.playerLoaded.visibility = View.GONE
+            highlightHandler.removeCallbacks(highlightTick)
             return
         }
         binding.playerEmpty.visibility = View.GONE
@@ -109,6 +137,73 @@ class PlayerFragment : Fragment() {
         }
 
         binding.playerSpeed.text = getString(R.string.player_speed_format, state.speed)
+
+        binding.playerNextText.text = state.nextText
+        // Reset highlight for the new chunk, then start ticking if we're playing.
+        refreshHighlight()
+        highlightHandler.removeCallbacks(highlightTick)
+        if (state.isPlaying) highlightHandler.postDelayed(highlightTick, HIGHLIGHT_INTERVAL_MS)
+
+        // Show "Synthesising…" only if we're playing but the current chunk hasn't started any
+        // audio for SYNTHESISING_DELAY_MS. This suppresses the flicker at every chunk transition
+        // while still explaining the wait when sherpa-onnx is genuinely slow on a long chunk.
+        synthesisingHandler.removeCallbacks(showSynthesisingRunnable)
+        if (state.isPlaying && state.currentChunkStartedAt == 0L) {
+            synthesisingHandler.postDelayed(showSynthesisingRunnable, SYNTHESISING_DELAY_MS)
+        } else {
+            binding.playerSynthesising.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun refreshHighlight() {
+        val state = container.narrator.state.value
+        val text = state.currentText
+        if (text.isEmpty()) {
+            binding.playerCurrentText.text = ""
+            return
+        }
+        // Use the MediaPlayer's actual playback position so the highlight tracks the audio
+        // exactly. (The previous time-based estimate at 80ms/char drifted behind real audio
+        // because Kokoro's per-character rate varies with content and speed.)
+        val position = container.narrator.playbackPositionMs()
+        val duration = container.narrator.playbackDurationMs()
+        val charsSpoken = if (duration > 0 && position > 0) {
+            (position.toFloat() / duration * text.length).toInt().coerceIn(0, text.length)
+        } else 0
+        // Snap to word boundary so highlight grows word-by-word.
+        val highlightEnd = snapToWordEnd(text, charsSpoken)
+        if (highlightEnd <= 0) {
+            binding.playerCurrentText.text = text
+            return
+        }
+        val spannable = SpannableString(text)
+        val highlightColor = highlightColor()
+        spannable.setSpan(
+            BackgroundColorSpan(highlightColor),
+            0, highlightEnd,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        binding.playerCurrentText.text = spannable
+    }
+
+    private fun snapToWordEnd(text: String, charsSpoken: Int): Int {
+        if (charsSpoken >= text.length) return text.length
+        if (charsSpoken <= 0) return 0
+        // Move forward to include any partial word.
+        var i = charsSpoken
+        while (i < text.length && !text[i].isWhitespace()) i++
+        return i
+    }
+
+    private fun highlightColor(): Int {
+        // Subtle highlight from the theme's primary color at ~30% alpha.
+        val base = ContextCompat.getColor(requireContext(), com.google.android.material.R.color.design_default_color_primary)
+        return Color.argb(
+            70,
+            Color.red(base),
+            Color.green(base),
+            Color.blue(base),
+        )
     }
 
     private fun updateProgressText(current: Int, total: Int) {
@@ -124,5 +219,9 @@ class PlayerFragment : Fragment() {
 
     private companion object {
         val SPEED_CYCLE = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+        const val HIGHLIGHT_INTERVAL_MS = 50L
+        // Long enough that the natural 1.5s chapter pause doesn't show the spinner; short enough
+        // that a genuinely slow synth on a long sentence still surfaces feedback.
+        const val SYNTHESISING_DELAY_MS = 1800L
     }
 }

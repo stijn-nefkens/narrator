@@ -1,8 +1,8 @@
 package com.example.narrator.tts
 
 import android.content.Context
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import com.example.narrator.data.AppPreferences
 import com.example.narrator.data.BookRepository
 import com.example.narrator.data.SkipIncrement
@@ -35,6 +35,10 @@ data class NarratorState(
     val position: Position = Position(0, 0, 0),
     val isPlaying: Boolean = false,
     val speed: Float = 1.0f,
+    val currentText: String = "",
+    val nextText: String = "",
+    /** SystemClock.elapsedRealtime() when the current chunk started playing; 0 = not yet. */
+    val currentChunkStartedAt: Long = 0L,
 )
 
 class Narrator(
@@ -50,6 +54,7 @@ class Narrator(
     private var ttsReady = false
     private var pendingPlay = false
     private var chunksByChapter: List<List<String>> = emptyList()
+    private var pipeline: FilePipeline? = null
 
     init {
         createTts()
@@ -57,21 +62,31 @@ class Narrator(
 
     private fun createTts() {
         ttsReady = false
+        // Drop the previous pipeline; it holds a MediaPlayer + listener bound to the old TTS.
+        pipeline?.release()
+        pipeline = null
         val enginePkg = VoicePreferences.enginePackage(context)
         tts = TextToSpeech(
             context.applicationContext,
             { status ->
                 ttsReady = status == TextToSpeech.SUCCESS
                 if (ttsReady) {
-                    tts?.language = Locale.US
+                    val readyTts = tts ?: return@TextToSpeech
+                    readyTts.language = Locale.US
                     applyStoredVoice()
-                    tts?.setSpeechRate(_state.value.speed)
-                    tts?.setPitch(preferences.pitch)
-                    tts?.setOnUtteranceProgressListener(progressListener)
-                    if (pendingPlay) {
-                        pendingPlay = false
-                        scope.launch { speakCurrent() }
-                    }
+                    // Synthesise at 1.0x; speed is applied at playback via MediaPlayer.
+                    readyTts.setSpeechRate(1.0f)
+                    readyTts.setPitch(preferences.pitch)
+                    pipeline = FilePipeline(
+                        context = context.applicationContext,
+                        tts = readyTts,
+                        onChunkStarted = ::onPipelineChunkStarted,
+                        onChunkCompleted = ::onPipelineChunkCompleted,
+                    ).also { it.setSpeed(_state.value.speed) }
+                    // TTS is now ready: prime the pipeline from the current position so the
+                    // first chunk is ready as soon as the user presses play.
+                    scope.launch { primeFromCurrent(autoplay = pendingPlay) }
+                    pendingPlay = false
                 }
             },
             enginePkg,
@@ -94,15 +109,14 @@ class Narrator(
         createTts()
     }
 
-    private val progressListener = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) {}
-        override fun onDone(utteranceId: String?) {
-            scope.launch { onChunkComplete() }
-        }
+    private fun onPipelineChunkStarted(id: String) {
+        val parsed = parseUtteranceId(id) ?: return
+        val now = SystemClock.elapsedRealtime()
+        scope.launch { onChunkStartPlayback(parsed, now) }
+    }
 
-        @Deprecated("Required by API contract")
-        override fun onError(utteranceId: String?) {}
-        override fun onError(utteranceId: String?, errorCode: Int) {}
+    private fun onPipelineChunkCompleted(@Suppress("UNUSED_PARAMETER") id: String) {
+        scope.launch { onChunkComplete() }
     }
 
     suspend fun loadBook(bookId: Long) {
@@ -129,9 +143,9 @@ class Narrator(
             Position(0, 0, 0)
         }
 
-        tts?.stop()
+        pipeline?.stop()
         val startSpeed = preferences.defaultSpeed
-        tts?.setSpeechRate(startSpeed)
+        pipeline?.setSpeed(startSpeed)
         tts?.setPitch(preferences.pitch)
         _state.value = NarratorState(
             loaded = loaded,
@@ -139,11 +153,28 @@ class Narrator(
             isPlaying = false,
             speed = startSpeed,
         )
+        updateCurrentTexts()
+        // Start prefetching as soon as the book is loaded so the first chunk is already
+        // synthesised by the time the user presses play.
+        primeFromCurrent(autoplay = false)
+    }
+
+    private fun primeFromCurrent(autoplay: Boolean) {
+        if (!ttsReady) return
+        val s = _state.value
+        val text = chunkTextAt(s.position) ?: return
+        pipeline?.startChunk(
+            text = text,
+            id = utteranceId(s.position),
+            chapterIndex = s.position.chapterIndex,
+            autoplay = autoplay,
+        )
+        queueAheadCount(from = s.position, count = PREFETCH_DEPTH)
     }
 
     fun setSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.8f, 2.0f)
-        tts?.setSpeechRate(clamped)
+        pipeline?.setSpeed(clamped)
         _state.value = _state.value.copy(speed = clamped)
     }
 
@@ -155,14 +186,22 @@ class Narrator(
         applyStoredVoice()
     }
 
+    /** Current chunk's MediaPlayer position, in ms. 0 if no playback. */
+    fun playbackPositionMs(): Int = pipeline?.currentPositionMs() ?: 0
+
+    /** Current chunk's MediaPlayer total duration, in ms. 0 if not yet known. */
+    fun playbackDurationMs(): Int = pipeline?.currentDurationMs() ?: 0
+
     fun seekToGlobalChunk(globalChunk: Int) {
         val s = _state.value
         val loaded = s.loaded ?: return
         val target = positionFromGlobal(loaded, globalChunk.coerceIn(0, (loaded.totalChunks - 1).coerceAtLeast(0)))
         val wasPlaying = s.isPlaying
-        if (wasPlaying) tts?.stop()
+        pipeline?.stop()
         _state.value = s.copy(position = target)
-        if (wasPlaying) speakCurrent()
+        updateCurrentTexts()
+        // Re-prime from the new position regardless of play state, so the next play is instant.
+        primeFromCurrent(autoplay = wasPlaying)
         persistBookmark()
     }
 
@@ -191,12 +230,21 @@ class Narrator(
         if (!ttsReady) {
             pendingPlay = true
         } else {
-            speakCurrent()
+            val pipe = pipeline
+            val id = utteranceId(s.position)
+            // If the pipeline is already primed for this position (paused mid-chunk, or
+            // pre-synthesised by loadBook), just unpause — we skip resynthesis and the audio
+            // is ready to go immediately.
+            if (pipe != null && (pipe.canResumeCurrent(id) || pipe.hasQueueHead(id))) {
+                pipe.resume()
+            } else {
+                primeFromCurrent(autoplay = true)
+            }
         }
     }
 
     private fun pause() {
-        tts?.stop()
+        pipeline?.pause()
         pendingPlay = false
         _state.value = _state.value.copy(isPlaying = false)
         persistBookmark()
@@ -219,7 +267,7 @@ class Narrator(
         val s = _state.value
         val loaded = s.loaded ?: return
         val wasPlaying = s.isPlaying
-        if (wasPlaying) tts?.stop()
+        pipeline?.stop()
         val newPos = when {
             chapterDelta != 0 -> positionFor(loaded, s.position.chapterIndex + chapterDelta, 0)
             chunkDelta > 0 -> advanceChunk(loaded, s.position, chunkDelta)
@@ -227,7 +275,9 @@ class Narrator(
             else -> s.position
         }
         _state.value = s.copy(position = newPos)
-        if (wasPlaying) speakCurrent()
+        updateCurrentTexts()
+        // Re-prime from the new position even when paused, so the next play is instant.
+        primeFromCurrent(autoplay = wasPlaying)
         persistBookmark()
     }
 
@@ -268,18 +318,68 @@ class Narrator(
         return Position(safeChapter, safeChunk, global)
     }
 
-    private fun speakCurrent() {
-        val s = _state.value
-        if (!s.isPlaying || !ttsReady) return
-        val text = chunksByChapter
-            .getOrNull(s.position.chapterIndex)
-            ?.getOrNull(s.position.chunkIndex)
-        if (text.isNullOrBlank()) {
-            _state.value = s.copy(isPlaying = false)
-            return
+    private fun queueAheadCount(from: Position, count: Int) {
+        val loaded = _state.value.loaded ?: return
+        var pos = from
+        repeat(count) {
+            val next = advanceChunk(loaded, pos, 1)
+            if (next == pos) return
+            if (next.chapterIndex != pos.chapterIndex && !preferences.continueThroughChapters) return
+            val text = chunkTextAt(next) ?: return
+            pipeline?.queueNext(text, utteranceId(next), next.chapterIndex)
+            pos = next
         }
-        val id = "n_${s.position.chapterIndex}_${s.position.chunkIndex}"
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+    }
+
+    /** Position [ahead] chunks past [from], or null if we'd cross a boundary that blocks us. */
+    private fun positionAhead(from: Position, ahead: Int): Position? {
+        val loaded = _state.value.loaded ?: return null
+        var pos = from
+        repeat(ahead) {
+            val next = advanceChunk(loaded, pos, 1)
+            if (next == pos) return null
+            if (next.chapterIndex != pos.chapterIndex && !preferences.continueThroughChapters) return null
+            pos = next
+        }
+        return pos
+    }
+
+    private companion object {
+        const val PREFETCH_DEPTH = 2
+    }
+
+    private fun chunkTextAt(p: Position): String? =
+        chunksByChapter.getOrNull(p.chapterIndex)?.getOrNull(p.chunkIndex)?.takeIf { it.isNotBlank() }
+
+    private fun utteranceId(p: Position): String = "n_${p.chapterIndex}_${p.chunkIndex}"
+
+    private data class ParsedId(val chapterIndex: Int, val chunkIndex: Int)
+
+    private fun parseUtteranceId(id: String?): ParsedId? {
+        if (id == null || !id.startsWith("n_")) return null
+        val parts = id.removePrefix("n_").split("_")
+        if (parts.size != 2) return null
+        val ch = parts[0].toIntOrNull() ?: return null
+        val ck = parts[1].toIntOrNull() ?: return null
+        return ParsedId(ch, ck)
+    }
+
+    private fun onChunkStartPlayback(parsed: ParsedId, startedAt: Long) {
+        val s = _state.value
+        if (s.position.chapterIndex == parsed.chapterIndex &&
+            s.position.chunkIndex == parsed.chunkIndex
+        ) {
+            _state.value = s.copy(currentChunkStartedAt = startedAt)
+        }
+    }
+
+    private fun updateCurrentTexts() {
+        val s = _state.value
+        val loaded = s.loaded ?: return
+        val current = chunkTextAt(s.position).orEmpty()
+        val nextPos = advanceChunk(loaded, s.position, 1)
+        val next = if (nextPos != s.position) chunkTextAt(nextPos).orEmpty() else ""
+        _state.value = s.copy(currentText = current, nextText = next, currentChunkStartedAt = 0L)
     }
 
     private fun onChunkComplete() {
@@ -295,14 +395,20 @@ class Narrator(
         }
         val crossedChapter = nextPos.chapterIndex != s.position.chapterIndex
         if (crossedChapter && !preferences.continueThroughChapters) {
-            // Stop at chapter end. Park position at the start of the next chapter so the
-            // user resumes there when they press play again.
+            // Park at start of next chapter. We did not prefetch across the boundary, so the
+            // engine queue is empty and playback genuinely stops here.
             _state.value = s.copy(position = nextPos, isPlaying = false)
             persistBookmark()
             return
         }
+        // The next chunk was prefetched and the engine is already speaking it. Move state forward
+        // and top the prefetch buffer back up with one more chunk at the tail end.
         _state.value = s.copy(position = nextPos)
-        speakCurrent()
+        updateCurrentTexts()
+        val tail = positionAhead(nextPos, PREFETCH_DEPTH)
+        if (tail != null) {
+            chunkTextAt(tail)?.let { pipeline?.queueNext(it, utteranceId(tail), tail.chapterIndex) }
+        }
         persistBookmark()
     }
 
@@ -320,6 +426,8 @@ class Narrator(
     }
 
     fun shutdown() {
+        pipeline?.release()
+        pipeline = null
         tts?.stop()
         tts?.shutdown()
         tts = null

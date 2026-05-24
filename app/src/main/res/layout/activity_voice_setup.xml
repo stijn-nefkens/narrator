@@ -49,6 +49,24 @@
                 android:textAppearance="?attr/textAppearanceSubtitle2" />
 
             <TextView
+                android:id="@+id/voice_setup_engine_speakers_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="12dp"
+                android:paddingTop="4dp"
+                android:text="@string/voice_setup_engine_speakers_note"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/voice_setup_open_engine"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/voice_setup_voices_empty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
