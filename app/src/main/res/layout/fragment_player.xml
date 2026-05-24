@@ -164,13 +164,13 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/player_bookmark"
-                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     app:icon="@drawable/ic_bookmark"
-                    app:iconSize="20dp"
-                    android:contentDescription="@string/bookmarks_open" />
+                    app:iconSize="18dp"
+                    android:text="@string/player_bookmark_label" />
             </LinearLayout>
 
             <TextView
