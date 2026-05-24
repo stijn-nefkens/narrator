@@ -272,8 +272,10 @@ class PlayerFragment : Fragment() {
                     if (bm.label.isNullOrBlank()) raw else "$raw · ${bm.label}"
                 }.toTypedArray()
             }
-            AlertDialog.Builder(requireContext())
-                .setTitle(R.string.bookmarks_title)
+            val title = if (bookmarks.isEmpty()) getString(R.string.bookmarks_title)
+            else "${getString(R.string.bookmarks_title)} · ${getString(R.string.bookmarks_long_press_hint)}"
+            val dialog = AlertDialog.Builder(requireContext())
+                .setTitle(title)
                 .setItems(labels) { _, which ->
                     if (bookmarks.isNotEmpty()) {
                         container.narrator.seekToGlobalChunk(bookmarks[which].globalChunk)
@@ -292,7 +294,26 @@ class PlayerFragment : Fragment() {
                     }
                 }
                 .setNeutralButton(R.string.bookmarks_close, null)
-                .show()
+                .create()
+            dialog.show()
+            // Long-press a row to delete it. setItems doesn't have a native long-click hook,
+            // so attach to the underlying ListView after show().
+            if (bookmarks.isNotEmpty()) {
+                dialog.listView?.setOnItemLongClickListener { _, _, position, _ ->
+                    val target = bookmarks[position]
+                    dialog.dismiss()
+                    AlertDialog.Builder(requireContext())
+                        .setMessage(R.string.bookmarks_delete_confirm)
+                        .setPositiveButton(R.string.library_delete) { _, _ ->
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                container.bookRepository.deleteBookmark(target.id)
+                            }
+                        }
+                        .setNegativeButton(R.string.library_cancel, null)
+                        .show()
+                    true
+                }
+            }
         }
     }
 
