@@ -51,6 +51,46 @@
     <!-- Player extra -->
     <string name="player_speed_format">%1$.2fx</string>
     <string name="player_synthesising">Synthesising…</string>
+    <string name="player_sleep_off">Sleep</string>
+    <string name="player_sleep_end_of_chapter">Chapter end</string>
+    <string name="player_sleep_countdown_format">%1$d:%2$02d</string>
+    <string name="player_remaining_long_format">About %1$dh %2$dm remaining</string>
+    <string name="player_remaining_short_format">About %1$dm remaining</string>
+    <string name="sleep_dialog_title">Sleep timer</string>
+    <string name="sleep_dialog_off">Off</string>
+    <string name="sleep_dialog_eoc">End of chapter</string>
+    <string name="sleep_dialog_15">15 minutes</string>
+    <string name="sleep_dialog_30">30 minutes</string>
+    <string name="sleep_dialog_60">60 minutes</string>
+    <string name="bookmarks_open">Bookmarks</string>
+    <string name="bookmarks_title">Bookmarks</string>
+    <string name="bookmarks_add_here">Add at current position</string>
+    <string name="bookmarks_close">Close</string>
+    <string name="bookmarks_empty">No bookmarks yet</string>
+    <string name="bookmarks_delete_confirm">Delete this bookmark?</string>
+    <string name="bookmarks_item_format">Chapter %1$d · %2$d%%</string>
+
+    <!-- Library sort + search + continue + multi-select -->
+    <string name="library_search_hint">Search title or author</string>
+    <string name="library_sort">Sort</string>
+    <string name="library_sort_recent">Recently played</string>
+    <string name="library_sort_added">Recently added</string>
+    <string name="library_sort_title">Title</string>
+    <string name="library_sort_author">Author</string>
+    <string name="library_continue">Continue</string>
+    <string name="library_selected_count">%1$d selected</string>
+    <string name="library_delete_selected">Delete selected books?</string>
+
+    <!-- About + privacy -->
+    <string name="about_title">About Narrator</string>
+    <string name="about_tagline">Privacy-first audiobook player</string>
+    <string name="about_version_format">Version %1$s (build %2$d)</string>
+    <string name="about_source">View source on GitHub</string>
+    <string name="about_privacy">Privacy</string>
+    <string name="about_license">License: Apache 2.0</string>
+    <string name="privacy_title">Privacy</string>
+    <string name="privacy_body">Narrator runs entirely on your device.\n\n• No network access for any core feature (import, parse, narrate, persist).\n• No analytics or tracking SDKs.\n• Your books, bookmarks, and progress never leave the device.\n• The only Android permissions used are the file picker for import and a foreground service for background playback.\n\nThe app may launch external apps (such as the sherpa-onnx TTS engine settings) when you tap their dedicated buttons, but it never sends data to the network on its own.</string>
+    <string name="privacy_close">Close</string>
     <string name="player_prev_chapter">Previous chapter</string>
     <string name="player_next_chapter">Next chapter</string>
     <string name="player_prev_step">Previous step</string>
@@ -58,7 +98,7 @@
 
     <!-- Voice setup -->
     <string name="voice_setup_title">Choose a voice</string>
-    <string name="voice_setup_intro">Pick a TTS engine to narrate your books. The bundled /e/OS voice is robotic; sherpa-onnx engines like Kokoro sound much more natural.</string>
+    <string name="voice_setup_intro">Pick a TTS engine. sherpa-onnx / Kokoro sounds much more natural than the bundled /e/OS voice.</string>
     <string name="voice_setup_sample">Sample</string>
     <string name="voice_setup_use">Use this voice</string>
     <string name="voice_setup_sample_sentence">This is what your books will sound like.</string>
@@ -72,6 +112,7 @@
     <string name="voice_setup_engine_speakers_note">Some engines (such as sherpa-onnx / Kokoro) expose only one Android voice per language and let you pick the speaker ID inside their own settings.</string>
     <string name="voice_setup_open_engine_settings">Open %1$s settings</string>
     <string name="voice_setup_open_engine_failed">Couldn\'t open %1$s — no launch intent.</string>
+    <string name="voice_setup_engine_settings_short">Settings</string>
 
     <!-- Notification -->
     <string name="notification_channel_playback">Playback</string>

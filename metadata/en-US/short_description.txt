@@ -1,0 +1,1 @@
+Privacy-first audiobook player. Imports EPUBs, narrates them on-device.

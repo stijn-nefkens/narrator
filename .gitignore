@@ -25,6 +25,10 @@ gradle-app.setting
 
 # --- Machine-specific config ---
 local.properties
+# Signing config — keep out of git
+app/keystore.properties
+*.jks
+*.keystore
 
 # --- OS junk ---
 .DS_Store
@@ -40,3 +44,7 @@ hs_err_pid*
 # Whitelist anything under app/src/test/resources if/when we commit shared test EPUBs.
 *.epub
 !app/src/test/resources/**/*.epub
+
+# --- Ad-hoc debug captures (screenshots, UI dumps) ---
+_*.png
+_*.xml

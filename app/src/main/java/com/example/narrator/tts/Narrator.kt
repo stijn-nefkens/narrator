@@ -39,7 +39,16 @@ data class NarratorState(
     val nextText: String = "",
     /** SystemClock.elapsedRealtime() when the current chunk started playing; 0 = not yet. */
     val currentChunkStartedAt: Long = 0L,
+    val sleepTimer: SleepTimer = SleepTimer.Off,
 )
+
+sealed class SleepTimer {
+    data object Off : SleepTimer()
+    /** Pause at the chapter boundary in the current chunk's chapter (not the next). */
+    data object EndOfChapter : SleepTimer()
+    /** Pause when SystemClock.elapsedRealtime() reaches [endsAtMs]. */
+    data class At(val endsAtMs: Long) : SleepTimer()
+}
 
 class Narrator(
     private val context: Context,
@@ -55,6 +64,10 @@ class Narrator(
     private var pendingPlay = false
     private var chunksByChapter: List<List<String>> = emptyList()
     private var pipeline: FilePipeline? = null
+
+    // Running totals used to estimate remaining time. Reset on book load.
+    private var statsCompletedMs: Long = 0L
+    private var statsCompletedChunks: Int = 0
 
     init {
         createTts()
@@ -121,9 +134,16 @@ class Narrator(
 
     suspend fun loadBook(bookId: Long) {
         val book = repository.getBook(bookId) ?: return
+        preferences.lastOpenedBookId = bookId
         val bookmark = repository.getBookmark(bookId)
 
-        val parsed = withContext(Dispatchers.IO) { EpubParser.parse(File(book.epubPath)) }
+        val parsed = try {
+            withContext(Dispatchers.IO) { EpubParser.parse(File(book.epubPath)) }
+        } catch (e: Exception) {
+            android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
+            // Leave state unchanged so the player keeps whatever was previously loaded.
+            return
+        }
         chunksByChapter = parsed.chapters.map { it.chunks }
         val total = chunksByChapter.sumOf { it.size }
         if (total != book.totalChunks) repository.updateTotalChunks(bookId, total)
@@ -144,7 +164,9 @@ class Narrator(
         }
 
         pipeline?.stop()
-        val startSpeed = preferences.defaultSpeed
+        // Per-book remembered speed wins over the global default — readers calibrate speed
+        // per book (slow for poetry, fast for filler).
+        val startSpeed = if (book.playbackSpeed > 0f) book.playbackSpeed else preferences.defaultSpeed
         pipeline?.setSpeed(startSpeed)
         tts?.setPitch(preferences.pitch)
         _state.value = NarratorState(
@@ -154,9 +176,41 @@ class Narrator(
             speed = startSpeed,
         )
         updateCurrentTexts()
+        statsCompletedMs = 0L
+        statsCompletedChunks = 0
         // Start prefetching as soon as the book is loaded so the first chunk is already
         // synthesised by the time the user presses play.
         primeFromCurrent(autoplay = false)
+    }
+
+    private var sleepTimerJob: kotlinx.coroutines.Job? = null
+
+    fun setSleepTimer(option: SleepTimer) {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _state.value = _state.value.copy(sleepTimer = option)
+        if (option is SleepTimer.At) {
+            val delayMs = (option.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            sleepTimerJob = scope.launch {
+                kotlinx.coroutines.delay(delayMs)
+                pause()
+                _state.value = _state.value.copy(sleepTimer = SleepTimer.Off)
+            }
+        }
+    }
+
+    /**
+     * Rough remaining playback in milliseconds at current speed, or 0 if we don't yet have
+     * enough samples (need ~3 chunks completed for a meaningful estimate).
+     */
+    fun remainingMs(): Long {
+        val s = _state.value
+        val loaded = s.loaded ?: return 0L
+        if (statsCompletedChunks < 3) return 0L
+        val avgMsPerChunk = statsCompletedMs / statsCompletedChunks
+        val remainingChunks = (loaded.totalChunks - s.position.globalChunk).coerceAtLeast(0)
+        val raw = remainingChunks.toLong() * avgMsPerChunk
+        return (raw / s.speed.coerceAtLeast(0.1f)).toLong()
     }
 
     private fun primeFromCurrent(autoplay: Boolean) {
@@ -176,6 +230,10 @@ class Narrator(
         val clamped = speed.coerceIn(0.8f, 2.0f)
         pipeline?.setSpeed(clamped)
         _state.value = _state.value.copy(speed = clamped)
+        // Remember per-book so it sticks across loads of the same book.
+        _state.value.loaded?.bookId?.let { id ->
+            scope.launch { repository.updatePlaybackSpeed(id, clamped) }
+        }
     }
 
     fun applyPitchFromPreferences() {
@@ -191,6 +249,23 @@ class Narrator(
 
     /** Current chunk's MediaPlayer total duration, in ms. 0 if not yet known. */
     fun playbackDurationMs(): Int = pipeline?.currentDurationMs() ?: 0
+
+    /**
+     * Returns the char index up-to-and-including which the current chunk is being spoken,
+     * derived from the engine's onRangeStart events. -1 if the engine didn't emit any events
+     * for this chunk (caller should fall back to a time-based estimate).
+     */
+    fun currentSpokenCharEnd(): Int {
+        val pipe = pipeline ?: return -1
+        val events = pipe.activeChunkRangeEvents()
+        if (events.isEmpty()) return -1
+        val sampleRate = pipe.activeChunkSampleRate()
+        if (sampleRate <= 0) return -1
+        val positionMs = pipe.currentPositionMs()
+        // Convert MP playback position (ms) → audio frame, then find the last event before it.
+        val currentFrame = (positionMs.toLong() * sampleRate / 1000L).toInt()
+        return events.lastOrNull { it.frame <= currentFrame }?.charEnd ?: 0
+    }
 
     fun seekToGlobalChunk(globalChunk: Int) {
         val s = _state.value
@@ -386,6 +461,14 @@ class Narrator(
         val s = _state.value
         if (!s.isPlaying) return
         val loaded = s.loaded ?: return
+        // Record timing for remainingMs() before any state changes.
+        if (s.currentChunkStartedAt > 0L) {
+            val playMs = SystemClock.elapsedRealtime() - s.currentChunkStartedAt
+            if (playMs in 100L..30_000L) {
+                statsCompletedMs += playMs
+                statsCompletedChunks++
+            }
+        }
         val nextPos = advanceChunk(loaded, s.position, 1)
         if (nextPos == s.position) {
             // End of book.
@@ -398,6 +481,17 @@ class Narrator(
             // Park at start of next chapter. We did not prefetch across the boundary, so the
             // engine queue is empty and playback genuinely stops here.
             _state.value = s.copy(position = nextPos, isPlaying = false)
+            persistBookmark()
+            return
+        }
+        // Sleep timer "End of chapter": pause at the boundary, then clear the timer.
+        if (crossedChapter && s.sleepTimer is SleepTimer.EndOfChapter) {
+            _state.value = s.copy(
+                position = nextPos,
+                isPlaying = false,
+                sleepTimer = SleepTimer.Off,
+            )
+            pipeline?.pause()
             persistBookmark()
             return
         }

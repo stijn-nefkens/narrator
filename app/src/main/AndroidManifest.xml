@@ -37,6 +37,11 @@
             android:exported="false"
             android:label="@string/voice_setup_title" />
 
+        <activity
+            android:name=".ui.about.AboutActivity"
+            android:exported="false"
+            android:label="@string/about_title" />
+
         <service
             android:name=".tts.NarrationService"
             android:exported="false"

@@ -5,6 +5,8 @@ import androidx.appcompat.app.AppCompatDelegate
 
 enum class SkipIncrement { SENTENCE, PARAGRAPH }
 
+enum class LibrarySortOrder { RECENTLY_PLAYED, RECENTLY_ADDED, TITLE, AUTHOR }
+
 enum class ThemeMode {
     LIGHT, DARK, SYSTEM;
 
@@ -38,6 +40,17 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_CONTINUE, true)
         set(value) = prefs.edit().putBoolean(KEY_CONTINUE, value).apply()
 
+    /** Id of the last book that was loaded into the player, or -1 if none. */
+    var lastOpenedBookId: Long
+        get() = prefs.getLong(KEY_LAST_BOOK, -1L)
+        set(value) = prefs.edit().putLong(KEY_LAST_BOOK, value).apply()
+
+    var librarySort: LibrarySortOrder
+        get() = LibrarySortOrder.valueOf(
+            prefs.getString(KEY_LIB_SORT, LibrarySortOrder.RECENTLY_PLAYED.name)!!
+        )
+        set(value) = prefs.edit().putString(KEY_LIB_SORT, value.name).apply()
+
     fun applyTheme() {
         AppCompatDelegate.setDefaultNightMode(theme.nightModeFlag())
     }
@@ -49,5 +62,7 @@ class AppPreferences(context: Context) {
         private const val KEY_SKIP = "skip_increment"
         private const val KEY_THEME = "theme"
         private const val KEY_CONTINUE = "continue_through_chapters"
+        private const val KEY_LAST_BOOK = "last_opened_book_id"
+        private const val KEY_LIB_SORT = "library_sort_order"
     }
 }

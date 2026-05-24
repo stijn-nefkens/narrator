@@ -8,6 +8,17 @@ data class BookEntity(
     val coverPath: String?,
     val totalChunks: Int,
     val importedAt: Long,
+    val playbackSpeed: Float = 1.0f,
+)
+
+data class SavedBookmark(
+    val id: Long,
+    val bookId: Long,
+    val chapterIndex: Int,
+    val chunkIndex: Int,
+    val globalChunk: Int,
+    val label: String?,
+    val createdAt: Long,
 )
 
 data class Bookmark(

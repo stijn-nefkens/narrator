@@ -72,12 +72,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp" />
 
+            <!-- progress text removed; the scrub bar already conveys the percentage visually -->
             <TextView
                 android:id="@+id/player_progress_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textAppearance="?attr/textAppearanceCaption"
-                tools:text="34%" />
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <!-- Transport controls -->
             <LinearLayout
@@ -138,13 +138,50 @@
                     android:contentDescription="@string/player_next_chapter" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/player_speed"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:orientation="horizontal"
                 android:layout_marginTop="12dp"
-                tools:text="1.00x" />
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_sleep"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ic_sleep"
+                    app:iconSize="18dp"
+                    android:text="@string/player_sleep_off" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_speed"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    tools:text="1.00x" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_bookmark"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    app:icon="@drawable/ic_bookmark"
+                    app:iconSize="18dp"
+                    android:contentDescription="@string/bookmarks_open"
+                    android:text="" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/player_remaining"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:alpha="0.6"
+                android:textAppearance="?attr/textAppearanceCaption"
+                tools:text="About 4h 12m remaining" />
 
             <TextView
                 android:id="@+id/player_synthesising"

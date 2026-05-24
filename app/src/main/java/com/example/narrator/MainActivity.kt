@@ -33,8 +33,18 @@ class MainActivity : AppCompatActivity() {
             attachIfMissing(TAG_PLAYER) { PlayerFragment() }
             attachIfMissing(TAG_LIBRARY) { LibraryFragment() }
             attachIfMissing(TAG_SETTINGS) { SettingsFragment() }
-            switchTo(TAG_LIBRARY)
-            binding.bottomNav.selectedItemId = R.id.nav_library
+            // Open Player on launch if there's a previously-loaded book; the auto-load happens
+            // asynchronously in NarratorApp.onCreate so by the time the fragment renders the
+            // book state is usually ready.
+            val container = (application as NarratorApp).container
+            val hasLastBook = container.preferences.lastOpenedBookId > 0
+            if (hasLastBook) {
+                switchTo(TAG_PLAYER)
+                binding.bottomNav.selectedItemId = R.id.nav_player
+            } else {
+                switchTo(TAG_LIBRARY)
+                binding.bottomNav.selectedItemId = R.id.nav_library
+            }
         } else {
             // Re-attach references to surviving fragments
             for (tag in listOf(TAG_PLAYER, TAG_LIBRARY, TAG_SETTINGS)) {

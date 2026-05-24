@@ -69,6 +69,9 @@ internal class FilePipeline(
             override fun onDone(utteranceId: String?) {
                 handler.post { handleSynthDone(utteranceId) }
             }
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                handler.post { recordRangeEvent(utteranceId, start, end, frame) }
+            }
             override fun onError(utteranceId: String?, errorCode: Int) {
                 handler.post { handleSynthError(utteranceId, errorCode) }
             }
@@ -77,6 +80,11 @@ internal class FilePipeline(
                 handler.post { handleSynthError(utteranceId, -1) }
             }
         })
+    }
+
+    private fun recordRangeEvent(synthUtteranceId: String?, start: Int, end: Int, frame: Int) {
+        val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
+        chunk.rangeEvents.add(RangeEvent(start, end, frame))
     }
 
     // --- public API ------------------------------------------------------
@@ -186,7 +194,8 @@ internal class FilePipeline(
         chunk.synthEndAt = android.os.SystemClock.elapsedRealtime()
         val synthMs = chunk.synthEndAt - chunk.synthStartAt
         Log.d(TAG, "TIMING synth id=${chunk.id} text_len=${chunk.text.length} " +
-            "synth_ms=$synthMs bytes=${chunk.file.length()}")
+            "synth_ms=$synthMs bytes=${chunk.file.length()} ranges=${chunk.rangeEvents.size}")
+        chunk.sampleRate = WavInfo.sampleRate(chunk.file).takeIf { it > 0 } ?: chunk.sampleRate
         // Mask the leading/trailing sample transients sherpa-onnx writes per utterance.
         WavFadeOut.apply(chunk.file)
         // If the queue front is now ready and the MP is idle, start playing it.
@@ -318,6 +327,9 @@ internal class FilePipeline(
 
     private fun newFile(): File = File(cacheDir, "${UUID.randomUUID()}.wav")
 
+    /** Char range the engine reports during synthesis via UtteranceProgressListener.onRangeStart. */
+    data class RangeEvent(val charStart: Int, val charEnd: Int, val frame: Int)
+
     private data class PendingChunk(
         val id: String,
         val text: String,
@@ -328,7 +340,15 @@ internal class FilePipeline(
         var synthStartAt: Long = 0L,
         var synthEndAt: Long = 0L,
         var playStartAt: Long = 0L,
+        val rangeEvents: MutableList<RangeEvent> = mutableListOf(),
+        var sampleRate: Int = 24000,
     )
+
+    /** Range events for the chunk currently bound to the MediaPlayer, or empty if engine doesn't emit them. */
+    fun activeChunkRangeEvents(): List<RangeEvent> = activeChunk?.rangeEvents?.toList().orEmpty()
+
+    /** Sample rate of the WAV currently bound to the MediaPlayer (defaults to 24000). */
+    fun activeChunkSampleRate(): Int = activeChunk?.sampleRate ?: 24000
 
     companion object {
         private const val TAG = "FilePipeline"

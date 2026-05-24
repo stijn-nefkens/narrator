@@ -1,0 +1,21 @@
+Narrator is an audiobook player for EPUB files. Designed for /e/OS and de-Googled
+Android devices, but works on any Android 8.0+ phone.
+
+Features
+
+- Import EPUB files via the system file picker; the parser strips page numbers and
+  other non-narratable artefacts, then splits the text into clause-aware chunks.
+- Plays through the on-device TextToSpeech engine of your choice. Sherpa-onnx /
+  Kokoro is recommended for natural neural narration; RHVoice is a lighter fallback.
+- Background playback with lock-screen / notification controls.
+- Per-book bookmarks, resume position, playback speed memory.
+- Sleep timer (end-of-chapter, 15/30/60 minutes).
+- Follow-along text with word-by-word highlighting.
+
+Privacy
+
+Everything runs on the device. No network access, no analytics, no tracking, no
+cloud sync. Your books, bookmarks, and progress never leave the phone.
+
+Source: https://github.com/stijn-nefkens/narrator
+License: Apache 2.0

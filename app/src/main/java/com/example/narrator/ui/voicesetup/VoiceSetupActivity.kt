@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
-import android.speech.tts.Voice
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -20,7 +19,7 @@ class VoiceSetupActivity : AppCompatActivity() {
     private lateinit var binding: ActivityVoiceSetupBinding
     private var sampleTts: TextToSpeech? = null
     private var sampleEnginePkg: String? = null
-    private var cachedVoices: List<Voice> = emptyList()
+    private val engineRows = linkedMapOf<String, ItemVoiceEngineBinding>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +35,6 @@ class VoiceSetupActivity : AppCompatActivity() {
         binding.voiceSetupDone.setOnClickListener { finish() }
 
         renderEngines()
-        renderVoicesForCurrentEngine()
     }
 
     override fun onDestroy() {
@@ -46,145 +44,58 @@ class VoiceSetupActivity : AppCompatActivity() {
         sampleTts = null
     }
 
-    // --- engines ---------------------------------------------------------
-
+    /** Builds the engine rows once. Subsequent selections just toggle the existing switches. */
     private fun renderEngines() {
         val probe = TextToSpeech(this) { /* engines list works regardless of init status */ }
         val engines = probe.engines.orEmpty()
         probe.shutdown()
 
         binding.voiceSetupEngines.removeAllViews()
+        engineRows.clear()
         if (engines.isEmpty()) {
             binding.voiceSetupNoEngines.visibility = View.VISIBLE
             return
         }
+        binding.voiceSetupNoEngines.visibility = View.GONE
 
         val currentEnginePkg = VoicePreferences.enginePackage(this)
         for (engine in engines) {
             val row = ItemVoiceEngineBinding.inflate(layoutInflater, binding.voiceSetupEngines, false)
             val label = engine.label.ifBlank { engine.name }
-            row.engineName.text = if (engine.name == currentEnginePkg) "$label ✓" else label
+
+            row.engineName.text = label
             row.enginePackage.text = engine.name
-            row.engineSample.setOnClickListener { playSample(engine.name, voiceName = null) }
-            row.engineUse.setOnClickListener { chooseEngine(engine.name) }
+            row.engineSwitch.isChecked = engine.name == currentEnginePkg
+
+            row.root.setOnClickListener { selectEngine(engine.name) }
+            row.engineSample.setOnClickListener { playSample(engine.name) }
+            row.engineOpenSettings.setOnClickListener { openEngineSettings(engine.name, label) }
+
+            engineRows[engine.name] = row
             binding.voiceSetupEngines.addView(row.root)
         }
     }
 
-    private fun chooseEngine(enginePackage: String) {
+    private fun selectEngine(enginePackage: String) {
+        val currentPkg = VoicePreferences.enginePackage(this)
+        if (enginePackage == currentPkg) return  // already selected; nothing to do
         VoicePreferences.setEngine(this, enginePackage)
         (application as NarratorApp).container.narrator.reinitEngine()
-        renderEngines()
-        renderVoicesForCurrentEngine()
-    }
-
-    // --- voices ----------------------------------------------------------
-
-    private fun renderVoicesForCurrentEngine() {
-        val enginePkg = VoicePreferences.enginePackage(this)
-        if (enginePkg == null) {
-            binding.voiceSetupVoicesHeader.text = ""
-            binding.voiceSetupEngineSpeakersNote.visibility = View.GONE
-            binding.voiceSetupOpenEngine.visibility = View.GONE
-            binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
-            binding.voiceSetupVoices.removeAllViews()
-            return
-        }
-        val label = engineLabel(enginePkg)
-        binding.voiceSetupVoicesHeader.text = getString(R.string.voice_setup_voices_for, label)
-        binding.voiceSetupEngineSpeakersNote.visibility = View.VISIBLE
-        binding.voiceSetupOpenEngine.apply {
-            visibility = View.VISIBLE
-            text = getString(R.string.voice_setup_open_engine_settings, label)
-            setOnClickListener { openEngineSettings(enginePkg, label) }
-        }
-        binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
-        binding.voiceSetupVoices.removeAllViews()
-
-        // Spin up a TTS bound to this engine so we can enumerate its voices.
-        sampleTts?.stop()
-        sampleTts?.shutdown()
-        sampleEnginePkg = enginePkg
-        sampleTts = TextToSpeech(
-            this,
-            { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    runOnUiThread { populateVoices(enginePkg) }
-                } else {
-                    runOnUiThread {
-                        binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
-                        binding.voiceSetupVoicesEmpty.text = "Engine init failed for $enginePkg"
-                    }
-                }
-            },
-            enginePkg,
-        )
-    }
-
-    private fun populateVoices(enginePkg: String) {
-        val voices = runCatching { sampleTts?.voices }.getOrNull().orEmpty()
-            .filterNotNull()
-            .sortedWith(compareBy({ it.locale?.language ?: "" }, { it.name }))
-        cachedVoices = voices
-        binding.voiceSetupVoices.removeAllViews()
-        if (voices.isEmpty()) {
-            binding.voiceSetupVoicesEmpty.visibility = View.VISIBLE
-            binding.voiceSetupVoicesEmpty.text = getString(R.string.voice_setup_voices_default)
-            return
-        }
-        binding.voiceSetupVoicesEmpty.visibility = View.GONE
-
-        val currentVoice = VoicePreferences.voiceName(this)
-
-        // Always offer "engine default" as the first option.
-        addVoiceRow(
-            displayName = getString(R.string.voice_setup_voices_default),
-            caption = "",
-            isCurrent = currentVoice == null,
-            onSample = { playSample(enginePkg, voiceName = null) },
-            onUse = { chooseVoice(null) },
-        )
-
-        for (voice in voices) {
-            val localeLabel = voice.locale?.displayName.orEmpty().ifBlank { voice.locale?.toString().orEmpty() }
-            addVoiceRow(
-                displayName = voice.name,
-                caption = localeLabel,
-                isCurrent = currentVoice == voice.name,
-                onSample = { playSample(enginePkg, voiceName = voice.name) },
-                onUse = { chooseVoice(voice.name) },
-            )
+        // Animate the existing switches: turn off all, turn on the selected one. MaterialSwitch
+        // animates this transition smoothly because the views are reused.
+        for ((pkg, row) in engineRows) {
+            row.engineSwitch.isChecked = (pkg == enginePackage)
         }
     }
 
-    private fun addVoiceRow(
-        displayName: String,
-        caption: String,
-        isCurrent: Boolean,
-        onSample: () -> Unit,
-        onUse: () -> Unit,
-    ) {
-        val row = ItemVoiceEngineBinding.inflate(layoutInflater, binding.voiceSetupVoices, false)
-        row.engineName.text = if (isCurrent) "$displayName ✓" else displayName
-        row.enginePackage.text = caption
-        row.enginePackage.visibility = if (caption.isEmpty()) View.GONE else View.VISIBLE
-        row.engineSample.setOnClickListener { onSample() }
-        row.engineUse.setOnClickListener { onUse() }
-        binding.voiceSetupVoices.addView(row.root)
-    }
-
-    private fun chooseVoice(voiceName: String?) {
-        VoicePreferences.setVoice(this, voiceName)
-        (application as NarratorApp).container.narrator.applyVoiceFromPreferences()
-        renderVoicesForCurrentEngine()
-    }
-
-    // --- sampling --------------------------------------------------------
-
-    private fun playSample(enginePackage: String, voiceName: String?) {
-        // Reuse the engine-bound TTS when we can — saves init time.
+    private fun playSample(enginePackage: String) {
         if (sampleEnginePkg == enginePackage && sampleTts != null) {
-            speakSampleOn(sampleTts!!, voiceName)
+            sampleTts?.speak(
+                getString(R.string.voice_setup_sample_sentence),
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "sample",
+            )
             return
         }
         sampleTts?.stop()
@@ -195,7 +106,12 @@ class VoiceSetupActivity : AppCompatActivity() {
             { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     sampleTts?.language = Locale.US
-                    speakSampleOn(sampleTts!!, voiceName)
+                    sampleTts?.speak(
+                        getString(R.string.voice_setup_sample_sentence),
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "sample",
+                    )
                 } else {
                     runOnUiThread {
                         Toast.makeText(this, "Couldn't start $enginePackage", Toast.LENGTH_SHORT).show()
@@ -206,39 +122,18 @@ class VoiceSetupActivity : AppCompatActivity() {
         )
     }
 
-    private fun speakSampleOn(tts: TextToSpeech, voiceName: String?) {
-        if (voiceName != null) {
-            val match = runCatching { tts.voices }.getOrNull()?.firstOrNull { it.name == voiceName }
-            if (match != null) runCatching { tts.voice = match }
-        } else {
-            // engine default — try to reset by picking the default voice for the language
-            runCatching { tts.defaultVoice?.let { tts.voice = it } }
-        }
-        val sample = getString(R.string.voice_setup_sample_sentence)
-        tts.speak(sample, TextToSpeech.QUEUE_FLUSH, null, "sample")
-    }
-
     private fun openEngineSettings(pkg: String, label: String) {
         val intent = packageManager.getLaunchIntentForPackage(pkg)
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } else {
-            // Fallback: open the Android system TTS settings page.
             runCatching {
                 startActivity(Intent("com.android.settings.TTS_SETTINGS"))
             }.onFailure {
                 Toast.makeText(this, getString(R.string.voice_setup_open_engine_failed, label), Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    private fun engineLabel(pkg: String): String {
-        val probe = TextToSpeech(this) { /* ignore */ }
-        val match = probe.engines?.firstOrNull { it.name == pkg }
-        val label = match?.label?.ifBlank { match.name } ?: pkg
-        probe.shutdown()
-        return label
     }
 
     companion object {

@@ -12,6 +12,7 @@ import com.example.narrator.data.AppPreferences
 import com.example.narrator.data.SkipIncrement
 import com.example.narrator.data.ThemeMode
 import com.example.narrator.databinding.FragmentSettingsBinding
+import com.example.narrator.ui.about.AboutActivity
 import com.example.narrator.ui.voicesetup.VoiceSetupActivity
 
 class SettingsFragment : Fragment() {
@@ -40,6 +41,9 @@ class SettingsFragment : Fragment() {
 
         binding.settingsVoiceSetupRow.setOnClickListener {
             startActivity(VoiceSetupActivity.intent(requireContext(), firstRun = false))
+        }
+        binding.settingsAboutRow.setOnClickListener {
+            startActivity(AboutActivity.intent(requireContext()))
         }
     }
 

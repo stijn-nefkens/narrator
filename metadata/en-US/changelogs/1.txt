@@ -1,0 +1,8 @@
+First public release.
+
+- EPUB import and parsing (chapters, cover, sentence/clause chunking).
+- On-device narration via TextToSpeech with sherpa-onnx / Kokoro support.
+- Library, Player, Settings tabs.
+- Foreground service with media-session controls.
+- Sleep timer, bookmarks, time-remaining estimate, per-book speed memory.
+- Follow-along text with word-level highlighting where the engine supports it.

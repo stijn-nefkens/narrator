@@ -1,7 +1,10 @@
 package com.example.narrator.ui.player
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import androidx.palette.graphics.Palette
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,8 +16,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.example.narrator.tts.SleepTimer
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -35,6 +40,12 @@ class PlayerFragment : Fragment() {
     private val highlightTick = object : Runnable {
         override fun run() {
             refreshHighlight()
+            // Refresh sleep countdown + time-remaining so they update independently of state.
+            _binding?.let { b ->
+                val state = container.narrator.state.value
+                b.playerSleep.text = sleepButtonLabel(state.sleepTimer)
+                b.playerRemaining.text = formatRemaining(container.narrator.remainingMs())
+            }
             if (container.narrator.state.value.isPlaying) {
                 highlightHandler.postDelayed(this, HIGHLIGHT_INTERVAL_MS)
             }
@@ -67,6 +78,8 @@ class PlayerFragment : Fragment() {
         binding.playerPrevStep.setOnClickListener { container.narrator.skipStepPrev() }
         binding.playerNextStep.setOnClickListener { container.narrator.skipStepNext() }
         binding.playerSpeed.setOnClickListener { cycleSpeed() }
+        binding.playerSleep.setOnClickListener { openSleepDialog() }
+        binding.playerBookmark.setOnClickListener { openBookmarksDialog() }
 
         binding.playerScrub.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
@@ -118,8 +131,10 @@ class PlayerFragment : Fragment() {
         val bitmap = loaded.coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
         if (bitmap != null) {
             binding.playerCover.setImageBitmap(bitmap)
+            applyCoverTint(bitmap)
         } else {
             binding.playerCover.setImageResource(R.drawable.ic_book_placeholder)
+            binding.playerLoaded.background = null
         }
 
         binding.playerPlayPause.setIconResource(
@@ -137,6 +152,8 @@ class PlayerFragment : Fragment() {
         }
 
         binding.playerSpeed.text = getString(R.string.player_speed_format, state.speed)
+        binding.playerSleep.text = sleepButtonLabel(state.sleepTimer)
+        binding.playerRemaining.text = formatRemaining(container.narrator.remainingMs())
 
         binding.playerNextText.text = state.nextText
         // Reset highlight for the new chunk, then start ticking if we're playing.
@@ -162,14 +179,18 @@ class PlayerFragment : Fragment() {
             binding.playerCurrentText.text = ""
             return
         }
-        // Use the MediaPlayer's actual playback position so the highlight tracks the audio
-        // exactly. (The previous time-based estimate at 80ms/char drifted behind real audio
-        // because Kokoro's per-character rate varies with content and speed.)
-        val position = container.narrator.playbackPositionMs()
-        val duration = container.narrator.playbackDurationMs()
-        val charsSpoken = if (duration > 0 && position > 0) {
-            (position.toFloat() / duration * text.length).toInt().coerceIn(0, text.length)
-        } else 0
+        // Prefer the engine's exact char range when available (onRangeStart events). Otherwise
+        // fall back to mapping MediaPlayer's playback position onto the text length.
+        val exact = container.narrator.currentSpokenCharEnd()
+        val charsSpoken = if (exact >= 0) {
+            exact.coerceIn(0, text.length)
+        } else {
+            val position = container.narrator.playbackPositionMs()
+            val duration = container.narrator.playbackDurationMs()
+            if (duration > 0 && position > 0) {
+                (position.toFloat() / duration * text.length).toInt().coerceIn(0, text.length)
+            } else 0
+        }
         // Snap to word boundary so highlight grows word-by-word.
         val highlightEnd = snapToWordEnd(text, charsSpoken)
         if (highlightEnd <= 0) {
@@ -211,10 +232,118 @@ class PlayerFragment : Fragment() {
         binding.playerProgressText.text = getString(R.string.library_progress_format, pct)
     }
 
+    private fun applyCoverTint(bitmap: Bitmap) {
+        // Sample asynchronously so we don't block render.
+        Palette.from(bitmap).generate { palette ->
+            val root = _binding?.playerLoaded ?: return@generate
+            val accent = palette?.darkVibrantSwatch?.rgb
+                ?: palette?.vibrantSwatch?.rgb
+                ?: palette?.darkMutedSwatch?.rgb
+                ?: return@generate
+            // 25%-alpha tint at the top fading to transparent — gives the player a per-book
+            // mood without fighting the dark theme.
+            val tint = Color.argb(64, Color.red(accent), Color.green(accent), Color.blue(accent))
+            val gradient = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(tint, Color.TRANSPARENT),
+            )
+            root.background = gradient
+        }
+    }
+
     private fun cycleSpeed() {
         val current = container.narrator.state.value.speed
         val next = SPEED_CYCLE.firstOrNull { it > current + 0.001f } ?: SPEED_CYCLE.first()
         container.narrator.setSpeed(next)
+    }
+
+    private fun openBookmarksDialog() {
+        val bookId = container.narrator.state.value.loaded?.bookId ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val bookmarks = container.bookRepository.listBookmarks(bookId)
+            val loaded = container.narrator.state.value.loaded
+            val totalChunks = loaded?.totalChunks ?: 1
+            val labels: Array<String> = if (bookmarks.isEmpty()) {
+                arrayOf(getString(R.string.bookmarks_empty))
+            } else {
+                bookmarks.map { bm ->
+                    val pct = (bm.globalChunk.toDouble() / totalChunks * 100).toInt().coerceIn(0, 100)
+                    val raw = getString(R.string.bookmarks_item_format, bm.chapterIndex + 1, pct)
+                    if (bm.label.isNullOrBlank()) raw else "$raw · ${bm.label}"
+                }.toTypedArray()
+            }
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.bookmarks_title)
+                .setItems(labels) { _, which ->
+                    if (bookmarks.isNotEmpty()) {
+                        container.narrator.seekToGlobalChunk(bookmarks[which].globalChunk)
+                    }
+                }
+                .setPositiveButton(R.string.bookmarks_add_here) { _, _ ->
+                    val s = container.narrator.state.value
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        container.bookRepository.addBookmark(
+                            bookId = bookId,
+                            chapterIndex = s.position.chapterIndex,
+                            chunkIndex = s.position.chunkIndex,
+                            globalChunk = s.position.globalChunk,
+                            label = null,
+                        )
+                    }
+                }
+                .setNeutralButton(R.string.bookmarks_close, null)
+                .show()
+        }
+    }
+
+    private fun openSleepDialog() {
+        val labels = arrayOf(
+            getString(R.string.sleep_dialog_off),
+            getString(R.string.sleep_dialog_eoc),
+            getString(R.string.sleep_dialog_15),
+            getString(R.string.sleep_dialog_30),
+            getString(R.string.sleep_dialog_60),
+        )
+        val current = container.narrator.state.value.sleepTimer
+        val selected = when {
+            current is SleepTimer.EndOfChapter -> 1
+            current is SleepTimer.At -> -1  // covered by countdown, no exact slot
+            else -> 0
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.sleep_dialog_title)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                val choice: SleepTimer = when (which) {
+                    1 -> SleepTimer.EndOfChapter
+                    2 -> SleepTimer.At(SystemClock.elapsedRealtime() + 15 * 60_000L)
+                    3 -> SleepTimer.At(SystemClock.elapsedRealtime() + 30 * 60_000L)
+                    4 -> SleepTimer.At(SystemClock.elapsedRealtime() + 60 * 60_000L)
+                    else -> SleepTimer.Off
+                }
+                container.narrator.setSleepTimer(choice)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun sleepButtonLabel(state: SleepTimer): String = when (state) {
+        SleepTimer.Off -> getString(R.string.player_sleep_off)
+        SleepTimer.EndOfChapter -> getString(R.string.player_sleep_end_of_chapter)
+        is SleepTimer.At -> {
+            val remainingMs = (state.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+            val mins = (remainingMs / 60_000L).toInt()
+            val secs = ((remainingMs % 60_000L) / 1000L).toInt()
+            getString(R.string.player_sleep_countdown_format, mins, secs)
+        }
+    }
+
+    private fun formatRemaining(ms: Long): String {
+        if (ms <= 0L) return ""
+        val totalMin = (ms / 60_000L).toInt()
+        val h = totalMin / 60
+        val m = totalMin % 60
+        return if (h > 0) getString(R.string.player_remaining_long_format, h, m)
+        else getString(R.string.player_remaining_short_format, m.coerceAtLeast(1))
     }
 
     private companion object {

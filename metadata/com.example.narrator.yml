@@ -1,0 +1,34 @@
+Categories:
+  - Multimedia
+  - Reading
+License: Apache-2.0
+AuthorName: Stijn Nefkens
+SourceCode: https://github.com/stijn-nefkens/narrator
+IssueTracker: https://github.com/stijn-nefkens/narrator/issues
+
+AutoName: Narrator
+Description: |
+    Narrator is an audiobook player for EPUB files. Designed for /e/OS and de-Googled
+    Android devices, but works on any Android 8.0+ phone.
+
+    Everything runs on the device — no network access, no analytics, no tracking, no
+    cloud sync. Books, bookmarks and progress never leave the phone.
+
+    The app uses the on-device TextToSpeech engine of your choice; sherpa-onnx with
+    Kokoro is recommended for natural neural narration.
+
+RepoType: git
+Repo: https://github.com/stijn-nefkens/narrator.git
+
+Builds:
+  - versionName: '0.1.0'
+    versionCode: 1
+    commit: v0.1.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '0.1.0'
+CurrentVersionCode: 1

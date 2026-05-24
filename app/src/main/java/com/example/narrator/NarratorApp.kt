@@ -21,6 +21,11 @@ class NarratorApp : Application() {
         container.preferences.applyTheme()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             container.bookRepository.refresh()
+            // Auto-load the last opened book so the Player isn't empty on cold start.
+            val lastId = container.preferences.lastOpenedBookId
+            if (lastId > 0 && container.bookRepository.getBook(lastId) != null) {
+                runCatching { container.narrator.loadBook(lastId) }
+            }
         }
     }
 }

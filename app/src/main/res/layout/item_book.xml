@@ -42,11 +42,20 @@
             android:ellipsize="end"
             tools:text="Lewis Carroll" />
 
+        <ProgressBar
+            android:id="@+id/item_progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            tools:progress="34" />
+
         <TextView
             android:id="@+id/item_progress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:textAppearance="?attr/textAppearanceCaption"
             tools:text="34%" />
     </LinearLayout>

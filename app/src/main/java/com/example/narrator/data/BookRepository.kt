@@ -111,6 +111,64 @@ class BookRepository(
         refresh()
     }
 
+    suspend fun updatePlaybackSpeed(bookId: Long, speed: Float) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply { put(NarratorDatabase.COL_PLAYBACK_SPEED, speed) }
+        writeDb().update(
+            NarratorDatabase.TABLE_BOOKS, values,
+            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
+        )
+    }
+
+    // --- Saved bookmarks (named positions) ---
+
+    suspend fun listBookmarks(bookId: Long): List<SavedBookmark> = withContext(Dispatchers.IO) {
+        readDb().query(
+            NarratorDatabase.TABLE_SAVED_BOOKMARKS, null,
+            "${NarratorDatabase.COL_BOOK_ID} = ?", arrayOf(bookId.toString()),
+            null, null, "${NarratorDatabase.COL_GLOBAL_CHUNK} ASC",
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(c.toSavedBookmark())
+            }
+        }
+    }
+
+    suspend fun addBookmark(
+        bookId: Long,
+        chapterIndex: Int,
+        chunkIndex: Int,
+        globalChunk: Int,
+        label: String?,
+    ): Long = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put(NarratorDatabase.COL_BOOK_ID, bookId)
+            put(NarratorDatabase.COL_CHAPTER_INDEX, chapterIndex)
+            put(NarratorDatabase.COL_CHUNK_INDEX, chunkIndex)
+            put(NarratorDatabase.COL_GLOBAL_CHUNK, globalChunk)
+            put(NarratorDatabase.COL_SAVED_LABEL, label)
+            put(NarratorDatabase.COL_SAVED_CREATED_AT, System.currentTimeMillis())
+        }
+        writeDb().insert(NarratorDatabase.TABLE_SAVED_BOOKMARKS, null, values)
+    }
+
+    suspend fun deleteBookmark(bookmarkId: Long) = withContext(Dispatchers.IO) {
+        writeDb().delete(
+            NarratorDatabase.TABLE_SAVED_BOOKMARKS,
+            "${NarratorDatabase.COL_SAVED_ID} = ?", arrayOf(bookmarkId.toString()),
+        )
+    }
+
+    private fun Cursor.toSavedBookmark(): SavedBookmark = SavedBookmark(
+        id = getLong(getColumnIndexOrThrow(NarratorDatabase.COL_SAVED_ID)),
+        bookId = getLong(getColumnIndexOrThrow(NarratorDatabase.COL_BOOK_ID)),
+        chapterIndex = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_CHAPTER_INDEX)),
+        chunkIndex = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_CHUNK_INDEX)),
+        globalChunk = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_GLOBAL_CHUNK)),
+        label = if (isNull(getColumnIndexOrThrow(NarratorDatabase.COL_SAVED_LABEL))) null
+            else getString(getColumnIndexOrThrow(NarratorDatabase.COL_SAVED_LABEL)),
+        createdAt = getLong(getColumnIndexOrThrow(NarratorDatabase.COL_SAVED_CREATED_AT)),
+    )
+
     suspend fun getBookmark(bookId: Long): Bookmark? = withContext(Dispatchers.IO) {
         readDb().query(
             NarratorDatabase.TABLE_BOOKMARKS, null,
@@ -188,6 +246,7 @@ class BookRepository(
             else getString(getColumnIndexOrThrow(NarratorDatabase.COL_COVER_PATH)),
         totalChunks = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_TOTAL_CHUNKS)),
         importedAt = getLong(getColumnIndexOrThrow(NarratorDatabase.COL_IMPORTED_AT)),
+        playbackSpeed = getFloat(getColumnIndexOrThrow(NarratorDatabase.COL_PLAYBACK_SPEED)),
     )
 
     private fun Cursor.toBookmark(): Bookmark = Bookmark(
