@@ -1,0 +1,42 @@
+# --- Build outputs ---
+/build
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# --- Gradle ---
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+
+# --- Kotlin / IDE caches ---
+.kotlin/
+
+# --- Android Studio / IntelliJ ---
+*.iml
+.idea/
+# (keep .idea/ ignored entirely; re-add specific files with !.idea/<name> if you ever want them shared)
+
+# --- Machine-specific config ---
+local.properties
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs / crash dumps ---
+*.log
+*.hprof
+hs_err_pid*
+
+# --- Test EPUBs sitting in the project root (developer-brought fixtures) ---
+# Whitelist anything under app/src/test/resources if/when we commit shared test EPUBs.
+*.epub
+!app/src/test/resources/**/*.epub
