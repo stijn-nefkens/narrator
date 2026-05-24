@@ -115,6 +115,11 @@
     <string name="voice_setup_open_engine_settings">Open %1$s settings</string>
     <string name="voice_setup_open_engine_failed">Couldn\'t open %1$s — no launch intent.</string>
     <string name="voice_setup_engine_settings_short">Settings</string>
+    <string name="voice_setup_get_more">Get a better voice</string>
+    <string name="voice_setup_get_more_title">Better TTS engines</string>
+    <string name="voice_setup_get_more_message">sherpa-onnx with Kokoro sounds clearly natural. RHVoice is a lighter alternative if storage is tight. Both are open source and available on F-Droid.</string>
+    <string name="voice_setup_get_sherpa">sherpa-onnx (Kokoro) on F-Droid</string>
+    <string name="voice_setup_get_rhvoice">RHVoice on F-Droid</string>
 
     <!-- Notification -->
     <string name="notification_channel_playback">Playback</string>

@@ -2,6 +2,7 @@ package com.example.narrator.data
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.example.narrator.epub.EpubParseException
 import com.example.narrator.epub.EpubParser
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,10 @@ class BookImporter(
     private val repository: BookRepository,
 ) {
     suspend fun importFromUri(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
+        // Capture the picker's display name BEFORE we copy the file — needed as a fallback
+        // for the title when the EPUB has no metadata title (per spec §5.1).
+        val originalDisplayName = displayNameFor(uri)
+
         val epubFile = repository.newEpubFile()
         try {
             copyUriToFile(uri, epubFile)
@@ -57,16 +62,23 @@ class BookImporter(
             f
         }
 
+        // Spec §5.1 fallback order: metadata → filename → "Unknown".
+        // The parser already substitutes "Unknown title" / "Unknown author" when metadata is
+        // missing. Replace those sentinels with the picker's display name when we have one.
+        val finalTitle = if (parsed.title == UNKNOWN_TITLE && !originalDisplayName.isNullOrBlank()) {
+            prettifyFilename(originalDisplayName)
+        } else parsed.title
+
         val totalChunks = parsed.chapters.sumOf { it.chunks.size }
         val pending = PendingImport(
-            title = parsed.title,
+            title = finalTitle,
             author = parsed.author,
             epubPath = epubFile.absolutePath,
             coverPath = coverFile?.absolutePath,
             totalChunks = totalChunks,
         )
 
-        val existing = repository.findByTitleAndAuthor(parsed.title, parsed.author)
+        val existing = repository.findByTitleAndAuthor(finalTitle, parsed.author)
         if (existing != null) return@withContext ImportResult.Duplicate(existing, pending)
 
         val id = repository.insertBook(
@@ -106,6 +118,26 @@ class BookImporter(
         input.use { src -> target.outputStream().use { src.copyTo(it) } }
     }
 
+    private fun displayNameFor(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+    }.getOrNull()
+
+    /** Turn "alices_adventures-in.wonderland.epub" → "Alices Adventures In Wonderland". */
+    private fun prettifyFilename(name: String): String {
+        val stripped = name.substringBeforeLast('.', name)
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (stripped.isEmpty()) return name
+        return stripped.split(' ').joinToString(" ") { word ->
+            word.replaceFirstChar { c -> c.uppercaseChar() }
+        }
+    }
+
     private fun String.toExtension(): String = when (this) {
         "image/jpeg" -> "jpg"
         "image/png" -> "png"
@@ -113,5 +145,10 @@ class BookImporter(
         "image/webp" -> "webp"
         "image/svg+xml" -> "svg"
         else -> "jpg"
+    }
+
+    private companion object {
+        // Must match EpubParser's hard-coded fallback string.
+        const val UNKNOWN_TITLE = "Unknown title"
     }
 }

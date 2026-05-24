@@ -2,10 +2,12 @@ package com.example.narrator.ui.voicesetup
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.narrator.NarratorApp
 import com.example.narrator.R
@@ -33,8 +35,25 @@ class VoiceSetupActivity : AppCompatActivity() {
             finish()
         }
         binding.voiceSetupDone.setOnClickListener { finish() }
+        binding.voiceSetupGetMore.setOnClickListener { showInstallChoices() }
 
         renderEngines()
+    }
+
+    private fun showInstallChoices() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_setup_get_more_title)
+            .setMessage(R.string.voice_setup_get_more_message)
+            .setPositiveButton(R.string.voice_setup_get_sherpa) { _, _ -> openUrl(URL_SHERPA) }
+            .setNeutralButton(R.string.voice_setup_get_rhvoice) { _, _ -> openUrl(URL_RHVOICE) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openUrl(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
     }
 
     override fun onDestroy() {
@@ -138,6 +157,8 @@ class VoiceSetupActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FIRST_RUN = "first_run"
+        private const val URL_SHERPA = "https://f-droid.org/packages/com.k2fsa.sherpa.onnx.tts.engine/"
+        private const val URL_RHVOICE = "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/"
 
         fun intent(context: Context, firstRun: Boolean): Intent =
             Intent(context, VoiceSetupActivity::class.java).putExtra(EXTRA_FIRST_RUN, firstRun)
