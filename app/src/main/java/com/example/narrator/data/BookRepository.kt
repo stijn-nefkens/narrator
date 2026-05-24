@@ -119,6 +119,18 @@ class BookRepository(
         )
     }
 
+    suspend fun updateBookDetails(bookId: Long, title: String, author: String) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put(NarratorDatabase.COL_TITLE, title)
+            put(NarratorDatabase.COL_AUTHOR, author)
+        }
+        writeDb().update(
+            NarratorDatabase.TABLE_BOOKS, values,
+            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
+        )
+        refresh()
+    }
+
     // --- Saved bookmarks (named positions) ---
 
     suspend fun listBookmarks(bookId: Long): List<SavedBookmark> = withContext(Dispatchers.IO) {

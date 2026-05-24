@@ -138,11 +138,47 @@
                     android:contentDescription="@string/player_next_chapter" />
             </LinearLayout>
 
+            <!-- Speed cluster on its own row so the −/+ controls have room to breathe. -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:layout_marginTop="12dp"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_speed_down"
+                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/player_speed_decrease"
+                    android:text="−"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_speed"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="64dp"
+                    tools:text="1.00x" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/player_speed_up"
+                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/player_speed_increase"
+                    android:text="+"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <!-- Utility row: Sleep + Mark. -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical">
 
                 <com.google.android.material.button.MaterialButton
@@ -153,14 +189,6 @@
                     app:icon="@drawable/ic_sleep"
                     app:iconSize="18dp"
                     android:text="@string/player_sleep_off" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/player_speed"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    tools:text="1.00x" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/player_bookmark"

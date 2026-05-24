@@ -53,12 +53,14 @@ class BookAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: BookWithProgress) {
+            val ctx = binding.root.context
             binding.itemTitle.text = item.book.title
             binding.itemAuthor.text = item.book.author
-            binding.itemProgress.text = binding.root.context.getString(
+            binding.itemProgress.text = ctx.getString(
                 R.string.library_progress_format, item.progressPercent,
             )
             binding.itemProgressBar.progress = item.progressPercent
+            binding.itemLastOpened.text = formatLastOpened(ctx, item.bookmark?.updatedAt)
 
             val coverPath = item.book.coverPath
             val bitmap = coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
@@ -75,6 +77,21 @@ class BookAdapter(
 
             binding.root.setOnClickListener { onClick(item) }
             binding.root.setOnLongClickListener { onLongClick(item); true }
+        }
+    }
+
+    private fun formatLastOpened(ctx: android.content.Context, updatedAtMs: Long?): String {
+        if (updatedAtMs == null || updatedAtMs <= 0L) return ctx.getString(R.string.library_last_opened_never)
+        val deltaMs = (System.currentTimeMillis() - updatedAtMs).coerceAtLeast(0L)
+        val minutes = deltaMs / 60_000L
+        val hours = deltaMs / 3_600_000L
+        val days = deltaMs / 86_400_000L
+        return when {
+            minutes < 2L -> ctx.getString(R.string.library_last_opened_just_now)
+            minutes < 60L -> ctx.getString(R.string.library_last_opened_minutes, minutes.toInt())
+            hours < 24L -> ctx.getString(R.string.library_last_opened_hours, hours.toInt())
+            days < 7L -> ctx.getString(R.string.library_last_opened_days, days.toInt())
+            else -> ctx.getString(R.string.library_last_opened_weeks, (days / 7L).toInt())
         }
     }
 

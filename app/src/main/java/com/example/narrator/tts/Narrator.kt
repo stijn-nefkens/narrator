@@ -1,6 +1,9 @@
 package com.example.narrator.tts
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import com.example.narrator.data.AppPreferences
@@ -68,6 +71,35 @@ class Narrator(
     // Running totals used to estimate remaining time. Reset on book load.
     private var statsCompletedMs: Long = 0L
     private var statsCompletedChunks: Int = 0
+
+    // Audio focus: pause playback when something else takes audio (call, alarm, assistant),
+    // resume when we get focus back from a transient loss.
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var pausedByFocusLoss: Boolean = false
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Permanent loss (call answered, etc.). Pause; don't auto-resume.
+                pausedByFocusLoss = false
+                if (_state.value.isPlaying) pause()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Brief interruption (alarm, notification). Pause and resume when focus returns.
+                if (_state.value.isPlaying) {
+                    pausedByFocusLoss = true
+                    pause()
+                }
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (pausedByFocusLoss) {
+                    pausedByFocusLoss = false
+                    play()
+                }
+            }
+        }
+    }
 
     init {
         createTts()
@@ -300,6 +332,10 @@ class Narrator(
     private fun play() {
         val s = _state.value
         if (s.loaded == null) return
+        if (!requestAudioFocus()) {
+            // Couldn't get focus (rare — usually only fails during an active call).
+            return
+        }
         _state.value = s.copy(isPlaying = true)
         NarrationService.start(context)
         if (!ttsReady) {
@@ -322,7 +358,35 @@ class Narrator(
         pipeline?.pause()
         pendingPlay = false
         _state.value = _state.value.copy(isPlaying = false)
+        // Only abandon focus on a "real" pause — if we paused due to a transient loss we want
+        // to keep our claim so we get GAIN back when the interruption ends.
+        if (!pausedByFocusLoss) abandonAudioFocus()
         persistBookmark()
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        if (audioFocusRequest != null) return true
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener(focusListener)
+            .setWillPauseWhenDucked(true)  // we pause for any loss, don't try to duck
+            .build()
+        val result = audioManager.requestAudioFocus(req)
+        return if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            audioFocusRequest = req
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        audioFocusRequest = null
     }
 
     fun skipChapterNext() = jumpBy(chapterDelta = +1)
@@ -520,6 +584,7 @@ class Narrator(
     }
 
     fun shutdown() {
+        abandonAudioFocus()
         pipeline?.release()
         pipeline = null
         tts?.stop()

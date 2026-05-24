@@ -127,8 +127,14 @@ class LibraryFragment : Fragment() {
             LibrarySortOrder.TITLE -> filtered.sortedBy { it.book.title.lowercase() }
             LibrarySortOrder.AUTHOR -> filtered.sortedBy { it.book.author.lowercase() }
         }
-        binding.libraryEmpty.visibility = if (allBooks.isEmpty()) View.VISIBLE else View.GONE
-        binding.libraryList.visibility = if (allBooks.isEmpty()) View.GONE else View.VISIBLE
+        val hasBooks = allBooks.isNotEmpty()
+        val hasMatches = sorted.isNotEmpty()
+        binding.libraryEmpty.visibility = if (!hasBooks) View.VISIBLE else View.GONE
+        binding.libraryNoMatches.visibility = if (hasBooks && !hasMatches && q.isNotBlank()) View.VISIBLE else View.GONE
+        binding.libraryList.visibility = if (hasBooks && hasMatches) View.VISIBLE else View.GONE
+        if (binding.libraryNoMatches.visibility == View.VISIBLE) {
+            binding.libraryNoMatches.text = getString(R.string.library_no_matches, query.trim())
+        }
         adapter.submitList(sorted)
     }
 
@@ -182,9 +188,59 @@ class LibraryFragment : Fragment() {
     }
 
     private fun onBookLongClicked(item: BookWithProgress) {
-        if (!adapter.selectionEnabled) enterSelectionMode()
-        adapter.toggleSelected(item)
-        updateActionModeTitle()
+        // In selection mode, long-press just toggles like a tap.
+        if (adapter.selectionEnabled) {
+            adapter.toggleSelected(item)
+            updateActionModeTitle()
+            return
+        }
+        // Otherwise show a small menu: Edit details / Enter selection mode.
+        val options = arrayOf(
+            getString(R.string.library_long_press_edit),
+            getString(R.string.library_long_press_select),
+        )
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.library_long_press_action)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> openRenameDialog(item)
+                    1 -> {
+                        enterSelectionMode()
+                        adapter.toggleSelected(item)
+                        updateActionModeTitle()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun openRenameDialog(item: BookWithProgress) {
+        val ctx = requireContext()
+        val titleInput = android.widget.EditText(ctx).apply {
+            setText(item.book.title); hint = getString(R.string.library_rename_title_hint)
+        }
+        val authorInput = android.widget.EditText(ctx).apply {
+            setText(item.book.author); hint = getString(R.string.library_rename_author_hint)
+        }
+        val column = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (resources.displayMetrics.density * 24).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(titleInput)
+            addView(authorInput)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.library_rename_title)
+            .setView(column)
+            .setPositiveButton(R.string.library_rename_save) { _, _ ->
+                val newTitle = titleInput.text.toString().trim().ifBlank { item.book.title }
+                val newAuthor = authorInput.text.toString().trim().ifBlank { item.book.author }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    container.bookRepository.updateBookDetails(item.book.id, newTitle, newAuthor)
+                }
+            }
+            .setNegativeButton(R.string.library_cancel, null)
+            .show()
     }
 
     private fun openCurrentBook(autoplay: Boolean = false) {

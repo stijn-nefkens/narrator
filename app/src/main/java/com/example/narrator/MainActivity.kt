@@ -1,13 +1,19 @@
 package com.example.narrator
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import com.example.narrator.data.ImportResult
+import kotlinx.coroutines.launch
 import com.example.narrator.databinding.ActivityMainBinding
 import com.example.narrator.tts.VoicePreferences
 import com.example.narrator.ui.library.LibraryFragment
@@ -25,6 +31,7 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        NarratorApp.applyThemeOverlay(this)
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -68,6 +75,60 @@ class MainActivity : AppCompatActivity() {
             startActivity(VoiceSetupActivity.intent(this, firstRun = true))
         }
         maybeRequestNotificationPermission()
+
+        // Handle a VIEW/SEND intent pointed at an EPUB file (file manager / share menu).
+        handleEpubIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTask launchMode re-uses this instance for new intents.
+        setIntent(intent)
+        handleEpubIntent(intent)
+    }
+
+    private fun handleEpubIntent(intent: Intent?) {
+        intent ?: return
+        val uri: Uri? = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> {
+                @Suppress("DEPRECATION")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            else -> null
+        }
+        if (uri == null) return
+        // Defuse the action so we don't re-import on configuration change / back-stack reuse.
+        intent.action = null
+        importFromExternalUri(uri)
+    }
+
+    private fun importFromExternalUri(uri: Uri) {
+        // The grant from the launching app is for THIS intent only; we copy to app-private
+        // storage immediately so no persistable URI permission is required.
+        val container = (application as NarratorApp).container
+        showPlayerTab().let { /* no-op; we'll switch to Library after */ }
+        binding.bottomNav.selectedItemId = R.id.nav_library
+        lifecycleScope.launch {
+            when (val result = container.bookImporter.importFromUri(uri)) {
+                is ImportResult.Inserted -> {
+                    Toast.makeText(this@MainActivity,
+                        getString(R.string.import_success, result.book.title), Toast.LENGTH_SHORT).show()
+                }
+                is ImportResult.Duplicate -> {
+                    // Already-imported book: keep what's there, drop the freshly-staged copy.
+                    container.bookImporter.confirmDuplicate(result.existing, result.pending, replace = false)
+                    Toast.makeText(this@MainActivity,
+                        getString(R.string.import_already_present, result.existing.title), Toast.LENGTH_SHORT).show()
+                }
+                is ImportResult.Failed -> {
+                    Toast.makeText(this@MainActivity,
+                        getString(R.string.import_failed, result.reason), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun maybeRequestNotificationPermission() {

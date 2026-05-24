@@ -5,6 +5,7 @@ import com.example.narrator.data.AppPreferences
 import com.example.narrator.data.BookImporter
 import com.example.narrator.data.BookRepository
 import com.example.narrator.data.NarratorDatabase
+import com.example.narrator.data.ThemeMode
 import com.example.narrator.tts.Narrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,20 @@ class NarratorApp : Application() {
             val lastId = container.preferences.lastOpenedBookId
             if (lastId > 0 && container.bookRepository.getBook(lastId) != null) {
                 runCatching { container.narrator.loadBook(lastId) }
+            }
+        }
+    }
+
+    companion object {
+        /**
+         * Activities call this in onCreate (BEFORE super.onCreate / setContentView) to apply
+         * the AMOLED true-black theme overlay when the user has selected ThemeMode.AMOLED.
+         * Other modes inherit the default Theme.Narrator.
+         */
+        fun applyThemeOverlay(activity: androidx.appcompat.app.AppCompatActivity) {
+            val prefs = (activity.application as NarratorApp).container.preferences
+            if (prefs.theme == ThemeMode.AMOLED) {
+                activity.setTheme(R.style.Theme_Narrator_Black)
             }
         }
     }

@@ -7,12 +7,14 @@ import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.narrator.BuildConfig
+import com.example.narrator.NarratorApp
 import com.example.narrator.R
 import com.example.narrator.databinding.ActivityAboutBinding
 
 class AboutActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        NarratorApp.applyThemeOverlay(this)
         super.onCreate(savedInstanceState)
         val binding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(binding.root)

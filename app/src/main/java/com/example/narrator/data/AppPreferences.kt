@@ -8,11 +8,11 @@ enum class SkipIncrement { SENTENCE, PARAGRAPH }
 enum class LibrarySortOrder { RECENTLY_PLAYED, RECENTLY_ADDED, TITLE, AUTHOR }
 
 enum class ThemeMode {
-    LIGHT, DARK, SYSTEM;
+    LIGHT, DARK, SYSTEM, AMOLED;
 
     fun nightModeFlag(): Int = when (this) {
         LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-        DARK -> AppCompatDelegate.MODE_NIGHT_YES
+        DARK, AMOLED -> AppCompatDelegate.MODE_NIGHT_YES
         SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
     }
 }

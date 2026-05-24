@@ -73,11 +73,15 @@ class PlayerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.playerPlayPause.setOnClickListener { container.narrator.togglePlayPause() }
+        binding.playerCover.setOnClickListener { container.narrator.togglePlayPause() }
+        binding.playerChapter.setOnClickListener { openChapterNavigator() }
         binding.playerPrevChapter.setOnClickListener { container.narrator.skipChapterPrev() }
         binding.playerNextChapter.setOnClickListener { container.narrator.skipChapterNext() }
         binding.playerPrevStep.setOnClickListener { container.narrator.skipStepPrev() }
         binding.playerNextStep.setOnClickListener { container.narrator.skipStepNext() }
-        binding.playerSpeed.setOnClickListener { cycleSpeed() }
+        binding.playerSpeed.setOnClickListener { container.narrator.setSpeed(1.0f) }
+        binding.playerSpeedDown.setOnClickListener { adjustSpeed(-0.05f) }
+        binding.playerSpeedUp.setOnClickListener { adjustSpeed(+0.05f) }
         binding.playerSleep.setOnClickListener { openSleepDialog() }
         binding.playerBookmark.setOnClickListener { openBookmarksDialog() }
 
@@ -251,10 +255,11 @@ class PlayerFragment : Fragment() {
         }
     }
 
-    private fun cycleSpeed() {
+    private fun adjustSpeed(delta: Float) {
         val current = container.narrator.state.value.speed
-        val next = SPEED_CYCLE.firstOrNull { it > current + 0.001f } ?: SPEED_CYCLE.first()
-        container.narrator.setSpeed(next)
+        // Snap to nearest 0.05 to avoid floating-point drift across many taps.
+        val target = (((current + delta) * 20).toInt() / 20.0f).coerceIn(0.8f, 2.0f)
+        container.narrator.setSpeed(target)
     }
 
     private fun openBookmarksDialog() {
@@ -317,6 +322,24 @@ class PlayerFragment : Fragment() {
         }
     }
 
+    private fun openChapterNavigator() {
+        val state = container.narrator.state.value
+        val loaded = state.loaded ?: return
+        if (loaded.chapterTitles.isEmpty()) return
+        val labels = loaded.chapterTitles.mapIndexed { i, title ->
+            "${i + 1}. $title"
+        }.toTypedArray()
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.player_chapter_dialog_title)
+            .setSingleChoiceItems(labels, state.position.chapterIndex) { dialog, which ->
+                val start = loaded.chapterChunkCounts.take(which).sum()
+                container.narrator.seekToGlobalChunk(start)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.bookmarks_close, null)
+            .show()
+    }
+
     private fun openSleepDialog() {
         val labels = arrayOf(
             getString(R.string.sleep_dialog_off),
@@ -324,26 +347,50 @@ class PlayerFragment : Fragment() {
             getString(R.string.sleep_dialog_15),
             getString(R.string.sleep_dialog_30),
             getString(R.string.sleep_dialog_60),
+            getString(R.string.sleep_dialog_custom),
         )
         val current = container.narrator.state.value.sleepTimer
         val selected = when {
             current is SleepTimer.EndOfChapter -> 1
-            current is SleepTimer.At -> -1  // covered by countdown, no exact slot
+            current is SleepTimer.At -> -1
             else -> 0
         }
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.sleep_dialog_title)
             .setSingleChoiceItems(labels, selected) { dialog, which ->
-                val choice: SleepTimer = when (which) {
-                    1 -> SleepTimer.EndOfChapter
-                    2 -> SleepTimer.At(SystemClock.elapsedRealtime() + 15 * 60_000L)
-                    3 -> SleepTimer.At(SystemClock.elapsedRealtime() + 30 * 60_000L)
-                    4 -> SleepTimer.At(SystemClock.elapsedRealtime() + 60 * 60_000L)
-                    else -> SleepTimer.Off
+                when (which) {
+                    1 -> container.narrator.setSleepTimer(SleepTimer.EndOfChapter)
+                    2 -> container.narrator.setSleepTimer(SleepTimer.At(SystemClock.elapsedRealtime() + 15 * 60_000L))
+                    3 -> container.narrator.setSleepTimer(SleepTimer.At(SystemClock.elapsedRealtime() + 30 * 60_000L))
+                    4 -> container.narrator.setSleepTimer(SleepTimer.At(SystemClock.elapsedRealtime() + 60 * 60_000L))
+                    5 -> openCustomSleepDialog()
+                    else -> container.narrator.setSleepTimer(SleepTimer.Off)
                 }
-                container.narrator.setSleepTimer(choice)
                 dialog.dismiss()
             }
+            .show()
+    }
+
+    private fun openCustomSleepDialog() {
+        val input = android.widget.EditText(requireContext()).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = getString(R.string.sleep_custom_hint)
+        }
+        val container = android.widget.FrameLayout(requireContext()).apply {
+            val pad = (resources.displayMetrics.density * 24).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.sleep_custom_title)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val mins = input.text.toString().toIntOrNull()?.coerceIn(1, 600) ?: return@setPositiveButton
+                this.container.narrator.setSleepTimer(
+                    SleepTimer.At(SystemClock.elapsedRealtime() + mins * 60_000L)
+                )
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
@@ -368,7 +415,6 @@ class PlayerFragment : Fragment() {
     }
 
     private companion object {
-        val SPEED_CYCLE = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
         const val HIGHLIGHT_INTERVAL_MS = 50L
         // Long enough that the natural 1.5s chapter pause doesn't show the spinner; short enough
         // that a genuinely slow synth on a long sentence still surfaces feedback.

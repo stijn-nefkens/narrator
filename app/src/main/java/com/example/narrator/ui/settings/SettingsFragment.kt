@@ -106,16 +106,24 @@ class SettingsFragment : Fragment() {
             ThemeMode.LIGHT -> R.id.settings_theme_light
             ThemeMode.DARK -> R.id.settings_theme_dark
             ThemeMode.SYSTEM -> R.id.settings_theme_system
+            ThemeMode.AMOLED -> R.id.settings_theme_amoled
         }
         binding.settingsThemeGroup.check(checkedId)
         binding.settingsThemeGroup.setOnCheckedChangeListener { _, id ->
             val mode = when (id) {
                 R.id.settings_theme_light -> ThemeMode.LIGHT
                 R.id.settings_theme_dark -> ThemeMode.DARK
+                R.id.settings_theme_amoled -> ThemeMode.AMOLED
                 else -> ThemeMode.SYSTEM
             }
+            val previous = prefs.theme
             prefs.theme = mode
             prefs.applyTheme()
+            // AMOLED is applied via setTheme() at activity onCreate, so a recreate is required
+            // when crossing into or out of it. Other transitions are handled by night mode alone.
+            if (previous == ThemeMode.AMOLED || mode == ThemeMode.AMOLED) {
+                requireActivity().recreate()
+            }
         }
     }
 

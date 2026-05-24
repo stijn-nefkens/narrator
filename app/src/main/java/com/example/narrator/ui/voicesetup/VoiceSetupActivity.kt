@@ -24,6 +24,7 @@ class VoiceSetupActivity : AppCompatActivity() {
     private val engineRows = linkedMapOf<String, ItemVoiceEngineBinding>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        NarratorApp.applyThemeOverlay(this)
         super.onCreate(savedInstanceState)
         binding = ActivityVoiceSetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -132,8 +133,14 @@ class VoiceSetupActivity : AppCompatActivity() {
                         "sample",
                     )
                 } else {
-                    runOnUiThread {
-                        Toast.makeText(this, "Couldn't start $enginePackage", Toast.LENGTH_SHORT).show()
+                    // Use applicationContext so the toast survives even if this activity is
+                    // already in the process of being destroyed when the engine init callback
+                    // fires (TTS init runs on a background thread without lifecycle awareness).
+                    val appCtx = applicationContext
+                    appCtx.let {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            Toast.makeText(it, "Couldn't start $enginePackage", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             },

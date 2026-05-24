@@ -26,8 +26,10 @@
     <string name="dup_replace">Replace</string>
     <string name="dup_keep_existing">Keep existing</string>
 
-    <!-- Import failure -->
+    <!-- Import outcomes -->
     <string name="import_failed">Couldn\'t import this file: %1$s</string>
+    <string name="import_success">Added "%1$s"</string>
+    <string name="import_already_present">"%1$s" is already in your library</string>
 
     <!-- Settings -->
     <string name="settings_default_speed">Default playback speed</string>
@@ -40,6 +42,7 @@
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_amoled">Black (AMOLED)</string>
     <string name="settings_theme_system">Follow system</string>
     <string name="settings_continue">Continue through chapter boundaries</string>
     <string name="settings_continue_summary">Off = playback stops at each chapter end</string>
@@ -62,6 +65,9 @@
     <string name="sleep_dialog_15">15 minutes</string>
     <string name="sleep_dialog_30">30 minutes</string>
     <string name="sleep_dialog_60">60 minutes</string>
+    <string name="sleep_dialog_custom">Custom…</string>
+    <string name="sleep_custom_title">Sleep timer</string>
+    <string name="sleep_custom_hint">Minutes</string>
     <string name="bookmarks_open">Bookmarks</string>
     <string name="bookmarks_title">Bookmarks</string>
     <string name="bookmarks_add_here">Add at current position</string>
@@ -70,6 +76,9 @@
     <string name="bookmarks_delete_confirm">Delete this bookmark?</string>
     <string name="bookmarks_long_press_hint">Long-press to delete</string>
     <string name="player_bookmark_label">Mark</string>
+    <string name="player_chapter_dialog_title">Jump to chapter</string>
+    <string name="player_speed_decrease">Slower</string>
+    <string name="player_speed_increase">Faster</string>
     <string name="bookmarks_item_format">Chapter %1$d · %2$d%%</string>
 
     <!-- Library sort + search + continue + multi-select -->
@@ -82,6 +91,20 @@
     <string name="library_continue">Continue</string>
     <string name="library_selected_count">%1$d selected</string>
     <string name="library_delete_selected">Delete selected books?</string>
+    <string name="library_no_matches">No books match "%1$s"</string>
+    <string name="library_rename_title">Edit book details</string>
+    <string name="library_rename_title_hint">Title</string>
+    <string name="library_rename_author_hint">Author</string>
+    <string name="library_rename_save">Save</string>
+    <string name="library_long_press_action">Long-press options</string>
+    <string name="library_long_press_edit">Edit title and author</string>
+    <string name="library_long_press_select">Select</string>
+    <string name="library_last_opened_just_now">Just now</string>
+    <string name="library_last_opened_minutes">%1$dm ago</string>
+    <string name="library_last_opened_hours">%1$dh ago</string>
+    <string name="library_last_opened_days">%1$dd ago</string>
+    <string name="library_last_opened_weeks">%1$dw ago</string>
+    <string name="library_last_opened_never">Never opened</string>
 
     <!-- About + privacy -->
     <string name="about_title">About Narrator</string>
