@@ -40,11 +40,11 @@ class PlayerFragment : Fragment() {
     private val highlightTick = object : Runnable {
         override fun run() {
             refreshHighlight()
-            // Refresh sleep countdown + time-remaining so they update independently of state.
+            // Refresh time-remaining + sleep info on every tick so the countdown updates
+            // independently of state changes.
             _binding?.let { b ->
                 val state = container.narrator.state.value
-                b.playerSleep.text = sleepButtonLabel(state.sleepTimer)
-                b.playerRemaining.text = formatRemaining(container.narrator.remainingMs())
+                b.playerRemaining.text = formatRemainingWithSleep(state.sleepTimer)
             }
             if (container.narrator.state.value.isPlaying) {
                 highlightHandler.postDelayed(this, HIGHLIGHT_INTERVAL_MS)
@@ -156,8 +156,9 @@ class PlayerFragment : Fragment() {
         }
 
         binding.playerSpeed.text = getString(R.string.player_speed_format, state.speed)
-        binding.playerSleep.text = sleepButtonLabel(state.sleepTimer)
-        binding.playerRemaining.text = formatRemaining(container.narrator.remainingMs())
+        // Sleep button is icon-only; the countdown / state is shown in the time-remaining line
+        // so the user has a single place to look for "what's coming up".
+        binding.playerRemaining.text = formatRemainingWithSleep(state.sleepTimer)
 
         binding.playerNextText.text = state.nextText
         // Reset highlight for the new chunk, then start ticking if we're playing.
@@ -394,15 +395,20 @@ class PlayerFragment : Fragment() {
             .show()
     }
 
-    private fun sleepButtonLabel(state: SleepTimer): String = when (state) {
-        SleepTimer.Off -> getString(R.string.player_sleep_off)
-        SleepTimer.EndOfChapter -> getString(R.string.player_sleep_end_of_chapter)
-        is SleepTimer.At -> {
-            val remainingMs = (state.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)
-            val mins = (remainingMs / 60_000L).toInt()
-            val secs = ((remainingMs % 60_000L) / 1000L).toInt()
-            getString(R.string.player_sleep_countdown_format, mins, secs)
+    /** Time-remaining line; appends a sleep-timer indicator when one is active. */
+    private fun formatRemainingWithSleep(sleep: SleepTimer): String {
+        val base = formatRemaining(container.narrator.remainingMs())
+        val sleepPart = when (sleep) {
+            SleepTimer.Off -> ""
+            SleepTimer.EndOfChapter -> " · " + getString(R.string.player_sleep_end_of_chapter)
+            is SleepTimer.At -> {
+                val remainingMs = (sleep.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+                val mins = (remainingMs / 60_000L).toInt()
+                val secs = ((remainingMs % 60_000L) / 1000L).toInt()
+                " · " + getString(R.string.player_sleep_countdown_format, mins, secs)
+            }
         }
+        return base + sleepPart
     }
 
     private fun formatRemaining(ms: Long): String {

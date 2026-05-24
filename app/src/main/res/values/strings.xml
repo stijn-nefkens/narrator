@@ -43,6 +43,9 @@
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
     <string name="settings_theme_amoled">Black (AMOLED)</string>
+    <!-- Short variants used in the segmented Theme row so all four fit a narrow phone. -->
+    <string name="settings_theme_system_short">System</string>
+    <string name="settings_theme_amoled_short">Black</string>
     <string name="settings_theme_system">Follow system</string>
     <string name="settings_continue">Continue through chapter boundaries</string>
     <string name="settings_continue_summary">Off = playback stops at each chapter end</string>

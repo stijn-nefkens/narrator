@@ -109,7 +109,8 @@ class SettingsFragment : Fragment() {
             ThemeMode.AMOLED -> R.id.settings_theme_amoled
         }
         binding.settingsThemeGroup.check(checkedId)
-        binding.settingsThemeGroup.setOnCheckedChangeListener { _, id ->
+        binding.settingsThemeGroup.addOnButtonCheckedListener { _, id, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
             val mode = when (id) {
                 R.id.settings_theme_light -> ThemeMode.LIGHT
                 R.id.settings_theme_dark -> ThemeMode.DARK
@@ -117,6 +118,7 @@ class SettingsFragment : Fragment() {
                 else -> ThemeMode.SYSTEM
             }
             val previous = prefs.theme
+            if (mode == previous) return@addOnButtonCheckedListener
             prefs.theme = mode
             prefs.applyTheme()
             // AMOLED is applied via setTheme() at activity onCreate, so a recreate is required
