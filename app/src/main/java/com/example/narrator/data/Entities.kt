@@ -9,6 +9,12 @@ data class BookEntity(
     val totalChunks: Int,
     val importedAt: Long,
     val playbackSpeed: Float = 1.0f,
+    /** Inclusive 1-based page range to parse from the source file. 0 in either field means
+     *  "no restriction"; only applied for PDFs. */
+    val pageRangeStart: Int = 0,
+    val pageRangeEnd: Int = 0,
+    /** Newline-separated regex patterns; chunks matching any pattern are dropped at load. */
+    val skipPatterns: String = "",
 )
 
 data class SavedBookmark(

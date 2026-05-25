@@ -1,0 +1,26 @@
+PDF import escape hatches.
+
+When the automatic cleanup heuristics don't get a PDF quite right, you
+now have three ways to take over:
+
+Page range at import
+- When importing a PDF, you're asked which pages to include. Leave the
+  fields blank to import all, or specify a start and end page to crop
+  out front matter / appendices the heuristics miss.
+
+Import preview
+- After parsing, a dialog lists the chapters with the first ~160
+  characters of body text per chapter. Useful for spotting a PDF that
+  extracted as garbage (image-only / weird fonts) before it lands in
+  your library. Tap "Add to library" or back out.
+
+Per-book skip patterns
+- Long-press a book in the library and tap "Edit details" — a new
+  "Skip patterns" field lets you enter one regex per line. Any chunk
+  matching a pattern is dropped at load time. Useful for recurring
+  cruft a single book ("^Continued on page", "^DRAFT —", etc.).
+
+The selected page range and skip patterns are persisted per book and
+re-applied every time the source is re-parsed.
+
+Database schema bumps to v3 (no data loss).

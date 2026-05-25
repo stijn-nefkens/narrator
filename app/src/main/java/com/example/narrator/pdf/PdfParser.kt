@@ -42,9 +42,10 @@ import java.util.Locale
  */
 object PdfParser {
 
-    fun parse(file: File): Book = FileInputStream(file).use { parse(it) }
+    fun parse(file: File, pageRange: IntRange? = null): Book =
+        FileInputStream(file).use { parse(it, pageRange) }
 
-    fun parse(input: InputStream): Book {
+    fun parse(input: InputStream, pageRange: IntRange? = null): Book {
         // PDFBox marks any PDF with security handlers as "encrypted" — including the very
         // common case of publisher PDFs that have an owner password (preventing copy/print
         // permission changes) but an EMPTY user password (so anyone can read them). Those
@@ -58,7 +59,12 @@ object PdfParser {
             throw EpubParseException("Failed to read PDF", e)
         }
         doc.use {
-            val rawLines = extractLines(it)
+            val effectiveRange = pageRange?.let { r ->
+                val start = r.first.coerceAtLeast(1)
+                val end = r.last.coerceAtMost(it.numberOfPages).coerceAtLeast(start)
+                start..end
+            } ?: (1..it.numberOfPages)
+            val rawLines = extractLines(it, effectiveRange)
             if (rawLines.none { ln -> ln.text.isNotBlank() }) {
                 throw EpubParseException(
                     "This PDF has no selectable text. Run it through OCR first."
@@ -80,7 +86,7 @@ object PdfParser {
                 throw EpubParseException("Could not extract any readable chapters from this PDF.")
             }
 
-            val cover = renderCover(it)
+            val cover = renderCover(it, effectiveRange.first - 1)
 
             return Book(
                 title = it.documentInformation?.title?.takeIf { t -> t.isNotBlank() }
@@ -98,7 +104,7 @@ object PdfParser {
 
     private data class StyledLine(val text: String, val fontSize: Float, val page: Int)
 
-    private fun extractLines(doc: PDDocument): List<StyledLine> {
+    private fun extractLines(doc: PDDocument, pageRange: IntRange): List<StyledLine> {
         val collected = mutableListOf<StyledLine>()
         val stripper = object : PDFTextStripper() {
             override fun writeString(text: String, textPositions: List<TextPosition>) {
@@ -116,8 +122,8 @@ object PdfParser {
             }
         }
         stripper.sortByPosition = true
-        stripper.startPage = 1
-        stripper.endPage = doc.numberOfPages
+        stripper.startPage = pageRange.first
+        stripper.endPage = pageRange.last
         // Discard PDFBox's accumulated text; we use writeString as a hook only.
         stripper.getText(doc)
         return collected
@@ -448,13 +454,13 @@ object PdfParser {
 
     // --- cover ------------------------------------------------------------
 
-    private fun renderCover(doc: PDDocument): ByteArray? {
-        if (doc.numberOfPages < 1) return null
+    private fun renderCover(doc: PDDocument, pageIndex: Int): ByteArray? {
+        if (doc.numberOfPages <= pageIndex || pageIndex < 0) return null
         return runCatching {
             val renderer = PDFRenderer(doc)
             // 1.0f = 72 DPI which is the PDF unit; bump to 1.5f for a sharper thumbnail without
             // blowing up the storage cost. The cover image is shown at ~140dp in the player.
-            val bitmap: Bitmap = renderer.renderImage(0, 1.5f, ImageType.RGB)
+            val bitmap: Bitmap = renderer.renderImage(pageIndex, 1.5f, ImageType.RGB)
             ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
                 bitmap.recycle()

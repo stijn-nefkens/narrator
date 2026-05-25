@@ -23,9 +23,10 @@ import com.example.narrator.NarratorApp
 import com.example.narrator.R
 import com.example.narrator.data.BookEntity
 import com.example.narrator.data.BookWithProgress
-import com.example.narrator.data.ImportResult
+import com.example.narrator.data.ChapterPreview
 import com.example.narrator.data.LibrarySortOrder
 import com.example.narrator.data.PendingImport
+import com.example.narrator.data.PrepareResult
 import com.example.narrator.databinding.FragmentLibraryBinding
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -222,27 +223,58 @@ class LibraryFragment : Fragment() {
 
     private fun openRenameDialog(item: BookWithProgress) {
         val ctx = requireContext()
+        val pad = (resources.displayMetrics.density * 24).toInt()
         val titleInput = android.widget.EditText(ctx).apply {
             setText(item.book.title); hint = getString(R.string.library_rename_title_hint)
         }
         val authorInput = android.widget.EditText(ctx).apply {
             setText(item.book.author); hint = getString(R.string.library_rename_author_hint)
         }
+        val skipLabel = android.widget.TextView(ctx).apply {
+            text = getString(R.string.library_skip_patterns_label)
+            setPadding(0, pad, 0, 4)
+        }
+        val skipHelp = android.widget.TextView(ctx).apply {
+            text = getString(R.string.library_skip_patterns_help)
+            textSize = 12f
+            setPadding(0, 0, 0, 4)
+        }
+        val skipInput = android.widget.EditText(ctx).apply {
+            setText(item.book.skipPatterns)
+            hint = getString(R.string.library_skip_patterns_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            isSingleLine = false
+            minLines = 2
+            setHorizontallyScrolling(false)
+        }
         val column = android.widget.LinearLayout(ctx).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            val pad = (resources.displayMetrics.density * 24).toInt()
             setPadding(pad, pad / 2, pad, 0)
             addView(titleInput)
             addView(authorInput)
+            addView(skipLabel)
+            addView(skipHelp)
+            addView(skipInput)
         }
+        val scroll = android.widget.ScrollView(ctx).apply { addView(column) }
         AlertDialog.Builder(ctx)
             .setTitle(R.string.library_rename_title)
-            .setView(column)
+            .setView(scroll)
             .setPositiveButton(R.string.library_rename_save) { _, _ ->
                 val newTitle = titleInput.text.toString().trim().ifBlank { item.book.title }
                 val newAuthor = authorInput.text.toString().trim().ifBlank { item.book.author }
+                val newSkip = skipInput.text.toString().trim()
                 viewLifecycleOwner.lifecycleScope.launch {
                     container.bookRepository.updateBookDetails(item.book.id, newTitle, newAuthor)
+                    if (newSkip != item.book.skipPatterns) {
+                        container.bookRepository.updateSkipPatterns(item.book.id, newSkip)
+                        // Re-parse next time the book is loaded by tapping; if it's the
+                        // currently loaded book, reload it now so the new patterns take effect.
+                        if (container.narrator.state.value.loaded?.bookId == item.book.id) {
+                            container.narrator.loadBook(item.book.id)
+                        }
+                    }
                 }
             }
             .setNegativeButton(R.string.library_cancel, null)
@@ -290,12 +322,127 @@ class LibraryFragment : Fragment() {
 
     private fun handlePickedUri(uri: Uri) {
         viewLifecycleOwner.lifecycleScope.launch {
-            when (val result = container.bookImporter.importFromUri(uri)) {
-                is ImportResult.Inserted -> { /* list updates via StateFlow */ }
-                is ImportResult.Duplicate -> promptDuplicate(result.existing, result.pending)
-                is ImportResult.Failed -> toast(getString(R.string.import_failed, result.reason))
+            // For PDFs: peek the page count and offer a range selector before parsing.
+            // Other formats skip straight to the parse step.
+            val pageCount = container.bookImporter.peekPdfPageCount(uri)
+            if (pageCount != null && pageCount > 1) {
+                askPageRangeAndPrepare(uri, pageCount)
+            } else {
+                runPrepare(uri, pageRange = null)
             }
         }
+    }
+
+    /** Shows a PDF page-range picker. Empty fields = "all pages". On confirm, kicks off
+     *  the prepare/preview flow with the selected range. */
+    private fun askPageRangeAndPrepare(uri: Uri, pageCount: Int) {
+        val ctx = requireContext()
+        val pad = (resources.displayMetrics.density * 24).toInt()
+        val startInput = android.widget.EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "1"
+        }
+        val endInput = android.widget.EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = pageCount.toString()
+        }
+        val row = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            addView(startInput, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+            val sep = android.widget.TextView(ctx).apply {
+                text = " – "
+                setPadding(pad / 2, 0, pad / 2, 0)
+            }
+            addView(sep)
+            addView(endInput, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        val wrapper = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(android.widget.TextView(ctx).apply {
+                text = getString(R.string.import_page_range_hint, pageCount)
+            })
+            addView(row)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.import_page_range_title)
+            .setView(wrapper)
+            .setPositiveButton(R.string.import_continue) { _, _ ->
+                val start = startInput.text.toString().toIntOrNull()
+                val end = endInput.text.toString().toIntOrNull()
+                val range = when {
+                    start == null && end == null -> null
+                    else -> {
+                        val s = (start ?: 1).coerceIn(1, pageCount)
+                        val e = (end ?: pageCount).coerceIn(s, pageCount)
+                        s..e
+                    }
+                }
+                viewLifecycleOwner.lifecycleScope.launch { runPrepare(uri, range) }
+            }
+            .setNeutralButton(R.string.import_all_pages) { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch { runPrepare(uri, null) }
+            }
+            .setNegativeButton(R.string.library_cancel, null)
+            .show()
+    }
+
+    /** Runs the prepare step (copy + parse) and routes the result into preview or dup
+     *  dialogs. */
+    private suspend fun runPrepare(uri: Uri, pageRange: IntRange?) {
+        when (val r = container.bookImporter.prepareImport(uri, pageRange)) {
+            is PrepareResult.Ready -> showImportPreview(r.title, r.author, r.chapterPreviews, r.pending)
+            is PrepareResult.Duplicate -> promptDuplicate(r.existing, r.pending)
+            is PrepareResult.Failed -> toast(getString(R.string.import_failed, r.reason))
+        }
+    }
+
+    /** Preview dialog listing the parsed chapters with their first ~160 characters of body.
+     *  Lets the user back out if extraction looks broken before committing the book. */
+    private fun showImportPreview(
+        title: String,
+        author: String,
+        chapters: List<ChapterPreview>,
+        pending: PendingImport,
+    ) {
+        val ctx = requireContext()
+        val pad = (resources.displayMetrics.density * 16).toInt()
+        val column = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            for (ch in chapters.take(20)) {
+                addView(android.widget.TextView(ctx).apply {
+                    text = "• ${ch.title} (${ch.chunkCount})"
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setPadding(0, pad / 2, 0, 0)
+                })
+                if (ch.firstChars.isNotBlank()) {
+                    addView(android.widget.TextView(ctx).apply {
+                        text = ch.firstChars + if (ch.firstChars.length >= 160) "…" else ""
+                        textSize = 13f
+                        setPadding(0, 2, 0, 0)
+                    })
+                }
+            }
+            if (chapters.size > 20) {
+                addView(android.widget.TextView(ctx).apply {
+                    text = getString(R.string.import_preview_more, chapters.size - 20)
+                    setPadding(0, pad, 0, 0)
+                })
+            }
+        }
+        val scroll = android.widget.ScrollView(ctx).apply { addView(column) }
+        AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.import_preview_title_format, title, author))
+            .setView(scroll)
+            .setPositiveButton(R.string.import_add_to_library) { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch { container.bookImporter.commit(pending) }
+            }
+            .setNegativeButton(R.string.library_cancel) { _, _ ->
+                container.bookImporter.cancel(pending)
+            }
+            .setOnCancelListener { container.bookImporter.cancel(pending) }
+            .show()
     }
 
     private fun promptDuplicate(existing: BookEntity, pending: PendingImport) {

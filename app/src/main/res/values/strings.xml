@@ -151,4 +151,16 @@
     <!-- Engine error surfaced when sherpa-onnx (or whichever engine is selected) is disabled,
          uninstalled, or otherwise unresponsive. Replaces a silent runaway-advance bug. -->
     <string name="engine_error_action">Voice setup</string>
+
+    <!-- PDF import escape hatches (Tier 5: page range, preview, skip patterns) -->
+    <string name="import_page_range_title">Pages to import</string>
+    <string name="import_page_range_hint">PDF has %1$d pages. Leave fields empty for all.</string>
+    <string name="import_continue">Continue</string>
+    <string name="import_all_pages">All pages</string>
+    <string name="import_preview_title_format">%1$s — %2$s</string>
+    <string name="import_preview_more">+ %1$d more chapters</string>
+    <string name="import_add_to_library">Add to library</string>
+    <string name="library_skip_patterns_label">Skip patterns (advanced)</string>
+    <string name="library_skip_patterns_help">One regex per line. Any chunk that matches a pattern is dropped at load. Example: ^Continued on page</string>
+    <string name="library_skip_patterns_hint">(none)</string>
 </resources>

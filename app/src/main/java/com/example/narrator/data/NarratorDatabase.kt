@@ -24,11 +24,23 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
             )
             db.execSQL(SQL_CREATE_SAVED_BOOKMARKS)
         }
+        if (oldVersion < 3) {
+            // PDF escape hatches: page-range subset + per-book skip-pattern regexes.
+            db.execSQL(
+                "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_PAGE_RANGE_START INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_PAGE_RANGE_END INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_SKIP_PATTERNS TEXT NOT NULL DEFAULT ''"
+            )
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "narrator.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         const val TABLE_BOOKS = "books"
         const val COL_ID = "id"
@@ -39,6 +51,11 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_TOTAL_CHUNKS = "total_chunks"
         const val COL_IMPORTED_AT = "imported_at"
         const val COL_PLAYBACK_SPEED = "playback_speed"
+        /** Inclusive 1-based page range applied at parse time. 0 = unset (use whole doc). */
+        const val COL_PAGE_RANGE_START = "page_range_start"
+        const val COL_PAGE_RANGE_END = "page_range_end"
+        /** Newline-separated regex patterns; chunks matching any are dropped post-parse. */
+        const val COL_SKIP_PATTERNS = "skip_patterns"
 
         /** Single resume position per book (the "where I left off" bookmark). */
         const val TABLE_BOOKMARKS = "bookmarks"
@@ -63,7 +80,10 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
               $COL_COVER_PATH TEXT,
               $COL_TOTAL_CHUNKS INTEGER NOT NULL DEFAULT 0,
               $COL_IMPORTED_AT INTEGER NOT NULL,
-              $COL_PLAYBACK_SPEED REAL NOT NULL DEFAULT 1.0
+              $COL_PLAYBACK_SPEED REAL NOT NULL DEFAULT 1.0,
+              $COL_PAGE_RANGE_START INTEGER NOT NULL DEFAULT 0,
+              $COL_PAGE_RANGE_END INTEGER NOT NULL DEFAULT 0,
+              $COL_SKIP_PATTERNS TEXT NOT NULL DEFAULT ''
             )
         """
 

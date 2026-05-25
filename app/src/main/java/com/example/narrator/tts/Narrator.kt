@@ -197,7 +197,7 @@ class Narrator(
         val bookmark = repository.getBookmark(bookId)
 
         val parsed: Book = try {
-            withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath)) }
+            withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
         } catch (e: Exception) {
             android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
             // Leave state unchanged so the player keeps whatever was previously loaded.
@@ -643,12 +643,27 @@ class Narrator(
     }
 
     /** Picks the parser by source file extension. Books are stored on disk with their
-     *  original extension preserved, so the source format is recoverable at load time. */
-    private fun parseBookFile(file: File): Book {
+     *  original extension preserved, so the source format is recoverable at load time.
+     *  Applies the per-book page range (PDF only) and skip-pattern filter. */
+    private fun parseBookFile(file: File, book: com.example.narrator.data.BookEntity): Book {
         val ext = file.extension.lowercase()
-        return when (ext) {
-            "pdf" -> PdfParser.parse(file)
+        val raw = when (ext) {
+            "pdf" -> {
+                val range = if (book.pageRangeStart > 0 && book.pageRangeEnd >= book.pageRangeStart)
+                    book.pageRangeStart..book.pageRangeEnd else null
+                PdfParser.parse(file, range)
+            }
             else -> EpubParser.parse(file)
         }
+        val patterns = book.skipPatterns.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { runCatching { Regex(it) }.getOrNull() }
+        if (patterns.isEmpty()) return raw
+        // Drop any chunk that matches any skip pattern.
+        val filteredChapters = raw.chapters.map { ch ->
+            ch.copy(chunks = ch.chunks.filterNot { chunk -> patterns.any { it.containsMatchIn(chunk) } })
+        }.filter { it.chunks.isNotEmpty() }
+        return raw.copy(chapters = filteredChapters)
     }
 }

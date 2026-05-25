@@ -49,6 +49,8 @@ class BookRepository(
         epubPath: String,
         coverPath: String?,
         totalChunks: Int,
+        pageRangeStart: Int = 0,
+        pageRangeEnd: Int = 0,
     ): Long = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put(NarratorDatabase.COL_TITLE, title)
@@ -57,6 +59,8 @@ class BookRepository(
             put(NarratorDatabase.COL_COVER_PATH, coverPath)
             put(NarratorDatabase.COL_TOTAL_CHUNKS, totalChunks)
             put(NarratorDatabase.COL_IMPORTED_AT, System.currentTimeMillis())
+            put(NarratorDatabase.COL_PAGE_RANGE_START, pageRangeStart)
+            put(NarratorDatabase.COL_PAGE_RANGE_END, pageRangeEnd)
         }
         val id = writeDb().insert(NarratorDatabase.TABLE_BOOKS, null, values)
         refresh()
@@ -70,6 +74,8 @@ class BookRepository(
         epubPath: String,
         coverPath: String?,
         totalChunks: Int,
+        pageRangeStart: Int = 0,
+        pageRangeEnd: Int = 0,
     ) = withContext(Dispatchers.IO) {
         val existing = getBook(existingId) ?: return@withContext
         deleteFilesQuietly(existing)
@@ -80,6 +86,8 @@ class BookRepository(
             put(NarratorDatabase.COL_COVER_PATH, coverPath)
             put(NarratorDatabase.COL_TOTAL_CHUNKS, totalChunks)
             put(NarratorDatabase.COL_IMPORTED_AT, System.currentTimeMillis())
+            put(NarratorDatabase.COL_PAGE_RANGE_START, pageRangeStart)
+            put(NarratorDatabase.COL_PAGE_RANGE_END, pageRangeEnd)
         }
         writeDb().update(
             NarratorDatabase.TABLE_BOOKS, values,
@@ -123,6 +131,19 @@ class BookRepository(
         val values = ContentValues().apply {
             put(NarratorDatabase.COL_TITLE, title)
             put(NarratorDatabase.COL_AUTHOR, author)
+        }
+        writeDb().update(
+            NarratorDatabase.TABLE_BOOKS, values,
+            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
+        )
+        refresh()
+    }
+
+    /** Updates the per-book skip-pattern regex list. Newline-separated; empty string
+     *  disables skip-pattern filtering for the book. */
+    suspend fun updateSkipPatterns(bookId: Long, patterns: String) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put(NarratorDatabase.COL_SKIP_PATTERNS, patterns)
         }
         writeDb().update(
             NarratorDatabase.TABLE_BOOKS, values,
@@ -265,6 +286,9 @@ class BookRepository(
         totalChunks = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_TOTAL_CHUNKS)),
         importedAt = getLong(getColumnIndexOrThrow(NarratorDatabase.COL_IMPORTED_AT)),
         playbackSpeed = getFloat(getColumnIndexOrThrow(NarratorDatabase.COL_PLAYBACK_SPEED)),
+        pageRangeStart = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_PAGE_RANGE_START)),
+        pageRangeEnd = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_PAGE_RANGE_END)),
+        skipPatterns = getString(getColumnIndexOrThrow(NarratorDatabase.COL_SKIP_PATTERNS)),
     )
 
     private fun Cursor.toBookmark(): Bookmark = Bookmark(
