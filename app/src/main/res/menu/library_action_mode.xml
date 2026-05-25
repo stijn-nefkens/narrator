@@ -5,13 +5,13 @@
          it via menu.findItem(R.id.action_edit).isVisible based on selection count. -->
     <item
         android:id="@+id/action_edit"
-        android:icon="@android:drawable/ic_menu_edit"
+        android:icon="@drawable/ic_edit"
         android:title="@string/library_long_press_edit"
         android:visible="false"
         app:showAsAction="always" />
     <item
         android:id="@+id/action_delete"
-        android:icon="@android:drawable/ic_menu_delete"
+        android:icon="@drawable/ic_delete"
         android:title="@string/library_delete"
         app:showAsAction="always" />
     <item

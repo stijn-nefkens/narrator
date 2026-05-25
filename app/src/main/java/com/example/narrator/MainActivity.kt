@@ -3,18 +3,23 @@ package com.example.narrator
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.narrator.data.ImportResult
 import kotlinx.coroutines.launch
 import com.example.narrator.databinding.ActivityMainBinding
+import com.example.narrator.tts.NarratorState
 import com.example.narrator.tts.VoicePreferences
 import com.example.narrator.ui.library.LibraryFragment
 import com.example.narrator.ui.player.PlayerFragment
@@ -68,8 +73,11 @@ class MainActivity : AppCompatActivity() {
                 else -> return@setOnItemSelectedListener false
             }
             switchTo(tag)
+            renderMiniPlayer((application as NarratorApp).container.narrator.state.value)
             true
         }
+
+        wireMiniPlayer()
 
         if (savedInstanceState == null && !VoicePreferences.isSetupDone(this)) {
             startActivity(VoiceSetupActivity.intent(this, firstRun = true))
@@ -142,6 +150,48 @@ class MainActivity : AppCompatActivity() {
     /** Called by LibraryFragment when the user taps a book — switches to Player tab. */
     fun showPlayerTab() {
         binding.bottomNav.selectedItemId = R.id.nav_player
+    }
+
+    /** Shows the mini-player above the bottom nav when a book is loaded and the user is
+     *  on any tab other than Player. Cover tap → jump to Player; play button toggles
+     *  without leaving the current tab. */
+    private fun wireMiniPlayer() {
+        val container = (application as NarratorApp).container
+        binding.miniPlayer.setOnClickListener { showPlayerTab() }
+        binding.miniPlay.setOnClickListener { container.narrator.togglePlayPause() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                container.narrator.state.collect(::renderMiniPlayer)
+            }
+        }
+    }
+
+    private fun renderMiniPlayer(state: NarratorState) {
+        val loaded = state.loaded
+        val onPlayerTab = currentTag == TAG_PLAYER
+        if (loaded == null || onPlayerTab) {
+            binding.miniPlayer.visibility = View.GONE
+            return
+        }
+        binding.miniPlayer.visibility = View.VISIBLE
+        binding.miniTitle.text = loaded.title
+        binding.miniSubtitle.text = getString(
+            R.string.mini_player_subtitle,
+            loaded.author,
+            state.position.chapterIndex + 1,
+            loaded.chapterTitles.size,
+        )
+        val bitmap = loaded.coverPath?.let {
+            runCatching { BitmapFactory.decodeFile(it) }.getOrNull()
+        }
+        if (bitmap != null) binding.miniCover.setImageBitmap(bitmap)
+        else binding.miniCover.setImageResource(R.drawable.ic_book_placeholder)
+        binding.miniPlay.setIconResource(
+            if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
+        )
+        binding.miniPlay.contentDescription = getString(
+            if (state.isPlaying) R.string.player_pause else R.string.player_play,
+        )
     }
 
     private fun attachIfMissing(tag: String, factory: () -> Fragment) {

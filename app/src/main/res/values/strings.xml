@@ -166,5 +166,27 @@
 
     <!-- Library QoL pass -->
     <string name="library_select_all">Select all</string>
-    <string name="library_delete_one_title">Delete "%1$s"?</string>
+    <string name="library_deleted_one">Deleted "%1$s"</string>
+    <string name="library_undo">Undo</string>
+    <string name="mini_player_subtitle">%1$s · Chapter %2$d of %3$d</string>
+
+    <!-- Backup / restore -->
+    <string name="settings_backup">Back up library</string>
+    <string name="settings_backup_summary">Save your books, covers, bookmarks and progress to a ZIP file</string>
+    <string name="settings_restore">Restore library</string>
+    <string name="settings_restore_summary">Replace the current library with a previously saved ZIP</string>
+    <string name="backup_default_name">narrator-backup-%1$s.zip</string>
+    <string name="backup_success">Backed up %1$d books</string>
+    <string name="backup_failed">Backup failed: %1$s</string>
+    <string name="restore_confirm_title">Restore library?</string>
+    <string name="restore_confirm_message">This wipes the current library — every book, bookmark and progress entry — and replaces them with the contents of the ZIP. Cannot be undone.</string>
+    <string name="restore_proceed">Restore</string>
+    <string name="restore_success">Restored %1$d books</string>
+    <string name="restore_failed">Restore failed: %1$s</string>
+
+    <!-- Bookmark export -->
+    <string name="bookmarks_export">Export</string>
+    <string name="bookmarks_export_default_name">narrator-bookmarks-%1$s.txt</string>
+    <string name="bookmarks_export_empty">No bookmarks to export</string>
+    <string name="bookmarks_export_success">Exported %1$d bookmarks</string>
 </resources>

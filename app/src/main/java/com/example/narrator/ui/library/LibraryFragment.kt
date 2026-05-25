@@ -30,6 +30,7 @@ import com.example.narrator.data.LibrarySortOrder
 import com.example.narrator.data.PendingImport
 import com.example.narrator.data.PrepareResult
 import com.example.narrator.databinding.FragmentLibraryBinding
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -134,7 +135,9 @@ class LibraryFragment : Fragment() {
     private fun applyFilterSort() {
         val sort = container.preferences.librarySort
         val q = query.trim().lowercase()
-        val filtered = if (q.isBlank()) allBooks else allBooks.filter { item ->
+        val base = if (pendingDeleteIds.isEmpty()) allBooks
+            else allBooks.filterNot { it.book.id in pendingDeleteIds }
+        val filtered = if (q.isBlank()) base else base.filter { item ->
             item.book.title.lowercase().contains(q) || item.book.author.lowercase().contains(q)
         }
         val sorted = when (sort) {
@@ -288,7 +291,8 @@ class LibraryFragment : Fragment() {
         adapter.setSelectionMode(true)
         binding.libraryActionMode.visibility = View.VISIBLE
         backCallback.isEnabled = true
-        updateActionModeTitle()
+        // Don't call updateActionModeTitle here — the caller toggles AFTER entering mode,
+        // and updateActionModeTitle would see 0 selected and immediately exit again.
     }
 
     private fun exitSelectionMode() {
@@ -300,14 +304,18 @@ class LibraryFragment : Fragment() {
     private fun updateActionModeTitle() {
         val n = adapter.selectedIds().size
         binding.libraryActionMode.title = getString(R.string.library_selected_count, n)
-        // Edit pen only makes sense for a single selection.
+        // Edit pen only makes sense for a single selection. MaterialToolbar caches the menu
+        // layout, so visibility changes need invalidateMenu() to actually take effect.
         binding.libraryActionMode.menu.findItem(R.id.action_edit)?.isVisible = (n == 1)
+        binding.libraryActionMode.invalidateMenu()
         if (n == 0) exitSelectionMode()
     }
 
     private fun confirmDeleteSelected() {
         val ids = adapter.selectedIds().toList()
         if (ids.isEmpty()) return
+        // For multi-delete the confirm step is more important — easier to misjudge how
+        // many rows you've ticked, and one Snackbar can't undo N independent deletes.
         AlertDialog.Builder(requireContext())
             .setMessage(R.string.library_delete_selected)
             .setPositiveButton(R.string.library_delete) { _, _ ->
@@ -320,9 +328,10 @@ class LibraryFragment : Fragment() {
             .show()
     }
 
-    /** Wires left-swipe on a library row to a delete confirmation. If the user cancels,
-     *  notifyItemChanged bounces the row back into place. Selection mode disables swipe
-     *  so people don't accidentally delete while multi-selecting. */
+    /** Left-swipe = delete with Snackbar undo. The row disappears from the list
+     *  immediately so the gesture feels decisive. A 5-second Snackbar with Undo lets the
+     *  user reverse it; if it times out we actually delete from the DB. Pending deletes
+     *  are queued by book id so multiple rapid swipes each get their own undo. */
     private fun attachSwipeToDelete() {
         val callback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
             override fun onMove(
@@ -339,22 +348,40 @@ class LibraryFragment : Fragment() {
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val pos = viewHolder.bindingAdapterPosition
                 val item = adapter.itemAt(pos) ?: return
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.library_delete_one_title, item.book.title))
-                    .setPositiveButton(R.string.library_delete) { _, _ ->
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            container.bookRepository.deleteBook(item.book.id)
-                        }
-                    }
-                    .setNegativeButton(R.string.library_cancel) { _, _ ->
-                        // Bounce the swiped row back into place.
-                        adapter.notifyItemChanged(pos)
-                    }
-                    .setOnCancelListener { adapter.notifyItemChanged(pos) }
-                    .show()
+                queueDeleteWithUndo(item.book.id, item.book.title)
             }
         }
         ItemTouchHelper(callback).attachToRecyclerView(binding.libraryList)
+    }
+
+    /** Books waiting on a possible Undo; the StateFlow filters them out of the visible
+     *  list, and the dispose callback either commits the delete or restores them. */
+    private val pendingDeleteIds: MutableSet<Long> = mutableSetOf()
+
+    private fun queueDeleteWithUndo(bookId: Long, title: String) {
+        pendingDeleteIds.add(bookId)
+        applyFilterSort()  // hide the row now
+        val snack = Snackbar.make(
+            binding.root,
+            getString(R.string.library_deleted_one, title),
+            Snackbar.LENGTH_LONG,
+        )
+        var undone = false
+        snack.setAction(R.string.library_undo) {
+            undone = true
+            pendingDeleteIds.remove(bookId)
+            applyFilterSort()
+        }
+        snack.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (!undone && pendingDeleteIds.remove(bookId)) {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        container.bookRepository.deleteBook(bookId)
+                    }
+                }
+            }
+        })
+        snack.show()
     }
 
     private fun handlePickedUri(uri: Uri) {

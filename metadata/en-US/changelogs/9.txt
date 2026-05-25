@@ -1,0 +1,16 @@
+QoL pass.
+
+- Swipe-to-delete now uses a Snackbar with Undo instead of an upfront
+  confirm dialog. The row disappears immediately; you have a few
+  seconds to tap Undo before it's actually removed.
+- Mini-player above the bottom nav on Library and Settings tabs:
+  cover, title, chapter, play/pause. Tap = jump to Player tab.
+- Chapter boundaries show as small dots on the player scrub bar so
+  you can see where chapters land at a glance.
+- Back up and restore your entire library (books, covers, bookmarks,
+  progress) as a single ZIP file. Settings → Back up library / Restore
+  library. Restore confirms before wiping the current state.
+- Bookmarks dialog → Export saves all bookmarks for the current book
+  as a plain-text file you can keep / share / re-import elsewhere.
+- EPUB / PDF chip bottom edge fixed (it's now a filled chip; the
+  outlined version had a sub-pixel rendering quirk on the bottom row).

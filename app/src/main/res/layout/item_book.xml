@@ -73,10 +73,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:paddingHorizontal="6dp"
-                android:paddingVertical="1dp"
+                android:paddingVertical="2dp"
                 android:textSize="10sp"
                 android:textAllCaps="true"
-                android:alpha="0.7"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:background="@drawable/library_format_chip_bg"
                 tools:text="PDF" />
 

@@ -58,4 +58,5 @@ class AppContainer(app: Application) {
     val bookRepository = BookRepository(appContext, database)
     val bookImporter = BookImporter(appContext, bookRepository)
     val narrator = Narrator(appContext, bookRepository, preferences)
+    val backupManager = com.example.narrator.data.BackupManager(appContext, database, bookRepository)
 }

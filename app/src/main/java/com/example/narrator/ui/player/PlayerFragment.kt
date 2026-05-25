@@ -4,6 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.palette.graphics.Palette
 import android.os.Bundle
 import android.os.Handler
@@ -40,6 +46,11 @@ class PlayerFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val container get() = (requireActivity().application as NarratorApp).container
+
+    /** Triggered after the user picks a destination file for bookmark export. */
+    private val exportBookmarks = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri: Uri? -> uri?.let(::writeBookmarksTo) }
 
     private var scrubbing = false
     private val highlightHandler = Handler(Looper.getMainLooper())
@@ -165,6 +176,13 @@ class PlayerFragment : Fragment() {
 
         val total = (loaded.totalChunks - 1).coerceAtLeast(0)
         binding.playerScrub.max = total
+        // Chapter boundary dots — running totals of chunks before each chapter, drop the
+        // leading 0 (start of book; the thumb already conveys that) and the trailing total.
+        val chapterStarts = loaded.chapterChunkCounts
+            .runningFold(0) { acc, n -> acc + n }
+            .drop(1)
+            .dropLast(1)
+        binding.playerScrub.setChapterStarts(chapterStarts)
         if (!scrubbing) {
             binding.playerScrub.progress = state.position.globalChunk.coerceIn(0, total)
             updateProgressText(state.position.globalChunk, total)
@@ -404,6 +422,7 @@ class PlayerFragment : Fragment() {
                         )
                     }
                 }
+                .setNegativeButton(R.string.bookmarks_export) { _, _ -> startExportBookmarks() }
                 .setNeutralButton(R.string.bookmarks_close, null)
                 .create()
             dialog.show()
@@ -424,6 +443,57 @@ class PlayerFragment : Fragment() {
                         .show()
                     true
                 }
+            }
+        }
+    }
+
+    private fun startExportBookmarks() {
+        val title = container.narrator.state.value.loaded?.title?.take(40) ?: "narrator"
+        val safe = title.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifEmpty { "narrator" }
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        exportBookmarks.launch("${safe}-bookmarks-${date}.txt")
+    }
+
+    private fun writeBookmarksTo(uri: Uri) {
+        val bookId = container.narrator.state.value.loaded?.bookId ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val loaded = container.narrator.state.value.loaded ?: return@launch
+            val bookmarks = container.bookRepository.listBookmarks(bookId)
+            if (bookmarks.isEmpty()) {
+                Toast.makeText(requireContext(), R.string.bookmarks_export_empty, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val total = loaded.totalChunks.coerceAtLeast(1)
+            val df = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+            val text = buildString {
+                appendLine("Narrator bookmarks")
+                appendLine("Book: ${loaded.title}")
+                appendLine("Author: ${loaded.author}")
+                appendLine()
+                for (bm in bookmarks) {
+                    val pct = (bm.globalChunk.toDouble() / total * 100).toInt().coerceIn(0, 100)
+                    val chapterTitle = loaded.chapterTitles.getOrNull(bm.chapterIndex).orEmpty()
+                    val label = bm.label?.takeIf { it.isNotBlank() }
+                    append("Chapter ${bm.chapterIndex + 1}")
+                    if (chapterTitle.isNotEmpty()) append(" — $chapterTitle")
+                    append(" · $pct%")
+                    if (label != null) append(" · $label")
+                    append(" · ${df.format(Date(bm.createdAt))}")
+                    appendLine()
+                }
+            }
+            runCatching {
+                requireContext().contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(text.toByteArray(Charsets.UTF_8))
+                }
+            }.onSuccess {
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.bookmarks_export_success, bookmarks.size),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }.onFailure { e ->
+                Toast.makeText(requireContext(), e.message ?: "Export failed", Toast.LENGTH_LONG).show()
             }
         }
     }
