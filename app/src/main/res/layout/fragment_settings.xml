@@ -211,13 +211,16 @@
             android:layout_marginVertical="4dp"
             android:background="?android:attr/listDivider" />
 
-        <!-- Continue through chapters -->
+        <!-- Continue through chapters — whole row tappable (consistent with voice setup rows) -->
         <LinearLayout
+            android:id="@+id/settings_continue_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="8dp"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:clickable="true"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="0dp"

@@ -134,5 +134,9 @@ class SettingsFragment : Fragment() {
         binding.settingsContinueSwitch.setOnCheckedChangeListener { _, checked ->
             prefs.continueThroughChapters = checked
         }
+        // Tapping anywhere on the row toggles the switch — consistent with voice-setup rows.
+        binding.settingsContinueRow.setOnClickListener {
+            binding.settingsContinueSwitch.isChecked = !binding.settingsContinueSwitch.isChecked
+        }
     }
 }

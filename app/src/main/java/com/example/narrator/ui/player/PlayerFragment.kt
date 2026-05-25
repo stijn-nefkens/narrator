@@ -258,8 +258,10 @@ class PlayerFragment : Fragment() {
 
     private fun adjustSpeed(delta: Float) {
         val current = container.narrator.state.value.speed
-        // Snap to nearest 0.05 to avoid floating-point drift across many taps.
-        val target = (((current + delta) * 20).toInt() / 20.0f).coerceIn(0.8f, 2.0f)
+        // Round to the nearest 0.05 step — toInt() truncates float-drift "1.0500004"
+        // to 21/20=1.05 instead of advancing to 1.10, which is why + got stuck at 1.05.
+        val steps = kotlin.math.round((current + delta) / 0.05f).toInt()
+        val target = (steps * 0.05f).coerceIn(0.8f, 2.0f)
         container.narrator.setSpeed(target)
     }
 
