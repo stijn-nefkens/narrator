@@ -1,0 +1,35 @@
+Quality-of-life update.
+
+Listening
+- Sleep timer (end-of-chapter, 15/30/60 min, or any custom minutes).
+- Time-remaining estimate, computed from observed playback rate.
+- Per-book remembered playback speed.
+- Auto-pause on phone calls and other audio-focus loss; auto-resume after
+  a transient interruption.
+- Word-by-word follow-along highlighting when the engine supports it.
+
+Player
+- Tap the cover to play/pause.
+- Tap the chapter line to jump to any chapter.
+- Speed controls: [-] [1.00x] [+] in 0.05x steps; tap the value to reset.
+- Cover-color tinting on the player background.
+- Bookmark button: save, jump to, and delete named positions.
+
+Library
+- Continue card pinned above the list when a book is loaded.
+- Search by title or author.
+- Sort by recently played, recently added, title, or author.
+- Long-press to edit title/author or enter multi-select for batch delete.
+- "Last opened" timestamp on each row.
+
+System
+- Open EPUBs directly from a file manager or share menu — no need to use
+  the import button.
+- Real About screen with version, source link, and in-app privacy policy.
+- AMOLED true-black theme.
+
+Polish
+- More compact Settings (segmented Theme buttons).
+- Smaller player cover so the follow-along caption fits without scrolling.
+- Engine-install dialog with direct F-Droid links to sherpa-onnx / RHVoice.
+- Title fallback to the picker's filename when the EPUB has no metadata.
