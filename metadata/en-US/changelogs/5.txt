@@ -1,0 +1,14 @@
+Fixes a runaway-playback bug when the TTS engine is unavailable.
+
+If the selected TTS engine (e.g. sherpa-onnx) is disabled, uninstalled,
+or otherwise can't be bound, every chunk's synthesis fails instantly.
+Previously this looked like playback was racing ahead at ~10x: the
+position counter advanced for each failed chunk while no audio was
+rendered.
+
+- After three consecutive synth failures, the pipeline now halts and
+  pauses playback instead of advancing through the book.
+- The Player shows a brief notice with a one-tap shortcut to Voice
+  setup so the engine can be fixed.
+- Single isolated synth failures still skip past the bad chunk so a
+  weird sentence doesn't stop the whole book.

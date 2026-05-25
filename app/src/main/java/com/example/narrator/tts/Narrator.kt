@@ -43,6 +43,10 @@ data class NarratorState(
     /** SystemClock.elapsedRealtime() when the current chunk started playing; 0 = not yet. */
     val currentChunkStartedAt: Long = 0L,
     val sleepTimer: SleepTimer = SleepTimer.Off,
+    /** Non-null after the TTS engine refuses to synth several chunks in a row. UI surfaces
+     *  this as a Snackbar pointing at Voice setup. Set back to null on the next successful
+     *  prime/play. */
+    val engineError: String? = null,
 )
 
 sealed class SleepTimer {
@@ -129,6 +133,7 @@ class Narrator(
                         tts = readyTts,
                         onChunkStarted = ::onPipelineChunkStarted,
                         onChunkCompleted = ::onPipelineChunkCompleted,
+                        onSynthCascadeFailure = ::onPipelineSynthCascade,
                     ).also { it.setSpeed(_state.value.speed) }
                     // TTS is now ready: prime the pipeline from the current position so the
                     // first chunk is ready as soon as the user presses play.
@@ -164,6 +169,24 @@ class Narrator(
 
     private fun onPipelineChunkCompleted(@Suppress("UNUSED_PARAMETER") id: String) {
         scope.launch { onChunkComplete() }
+    }
+
+    private fun onPipelineSynthCascade() {
+        // FilePipeline has already paused itself and dropped its queue. Mirror that into
+        // NarratorState so the UI shows the paused state, and surface a one-shot error
+        // message — the Player UI consumes this with a Snackbar pointing at Voice setup.
+        suspendSleepCountdown()
+        _state.value = _state.value.copy(
+            isPlaying = false,
+            engineError = "TTS engine isn't responding. Check Voice setup.",
+        )
+    }
+
+    /** Clears the engineError flag — call this after the UI has shown it once. */
+    fun clearEngineError() {
+        if (_state.value.engineError != null) {
+            _state.value = _state.value.copy(engineError = null)
+        }
     }
 
     suspend fun loadBook(bookId: Long) {

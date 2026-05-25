@@ -29,6 +29,7 @@ internal class FilePipeline(
     private val tts: TextToSpeech,
     private val onChunkStarted: (id: String) -> Unit,
     private val onChunkCompleted: (id: String) -> Unit,
+    private val onSynthCascadeFailure: () -> Unit = {},
 ) {
     private val cacheDir = File(context.cacheDir, "narrator-chunks").apply {
         if (exists()) listFiles()?.forEach { it.delete() }
@@ -62,6 +63,16 @@ internal class FilePipeline(
     /** Chapter of the most recently completed chunk; used to insert a pause at chapter boundaries. */
     private var lastCompletedChapter: Int = -1
     private var pendingChapterStart: Runnable? = null
+
+    /**
+     * Cascading-failure guard: if the TTS engine is disabled / unbound / broken,
+     * synthesizeToFile returns ERROR for every call. Previously we treated each as a
+     * completed chunk and auto-advanced — which made the book race forward with no audio
+     * (observed by the user as "10x playback"). Now: after this many consecutive errors
+     * with no successful synth between them, we halt the pipeline and notify the caller.
+     */
+    private var consecutiveSynthErrors = 0
+    private val maxConsecutiveSynthErrors = 3
 
     init {
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -191,6 +202,7 @@ internal class FilePipeline(
     private fun handleSynthDone(synthUtteranceId: String?) {
         val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
         chunk.synthDone = true
+        consecutiveSynthErrors = 0
         chunk.synthEndAt = android.os.SystemClock.elapsedRealtime()
         val synthMs = chunk.synthEndAt - chunk.synthStartAt
         Log.d(TAG, "TIMING synth id=${chunk.id} text_len=${chunk.text.length} " +
@@ -206,7 +218,21 @@ internal class FilePipeline(
 
     private fun handleSynthError(synthUtteranceId: String?, code: Int) {
         val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
-        Log.w(TAG, "synth_error id=${chunk.id} code=$code — skipping")
+        consecutiveSynthErrors++
+        Log.w(TAG, "synth_error id=${chunk.id} code=$code consecutive=$consecutiveSynthErrors")
+        if (consecutiveSynthErrors >= maxConsecutiveSynthErrors) {
+            Log.w(TAG, "synth cascade: halting pipeline to avoid runaway position advance")
+            pause()
+            // Drop the queued attempts so we don't replay these failures the moment the user
+            // resumes after fixing the engine — primeFromCurrent will requeue from the (un-
+            // advanced) position.
+            for (c in queue) runCatching { c.file.delete() }
+            queue.clear()
+            consecutiveSynthErrors = 0
+            onSynthCascadeFailure()
+            return
+        }
+        // Single-chunk failure: skip past the bad chunk so playback continues with the next.
         queue.remove(chunk)
         runCatching { chunk.file.delete() }
         onChunkCompleted(chunk.id)

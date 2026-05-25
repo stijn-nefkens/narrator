@@ -31,6 +31,8 @@ import com.example.narrator.NarratorApp
 import com.example.narrator.R
 import com.example.narrator.databinding.FragmentPlayerBinding
 import com.example.narrator.tts.NarratorState
+import com.example.narrator.ui.voicesetup.VoiceSetupActivity
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 class PlayerFragment : Fragment() {
@@ -113,6 +115,17 @@ class PlayerFragment : Fragment() {
     }
 
     private fun render(state: NarratorState) {
+        // Surface engine errors (e.g. TTS engine disabled) as a one-shot Snackbar with a
+        // shortcut into Voice setup. Clearing the flag here makes this a single render fire,
+        // and prevents the message from re-showing on every subsequent state emit.
+        state.engineError?.let { msg ->
+            Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG)
+                .setAction(R.string.engine_error_action) {
+                    startActivity(VoiceSetupActivity.intent(requireContext(), firstRun = false))
+                }
+                .show()
+            container.narrator.clearEngineError()
+        }
         val loaded = state.loaded
         if (loaded == null) {
             binding.playerEmpty.visibility = View.VISIBLE

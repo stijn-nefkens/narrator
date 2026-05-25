@@ -147,4 +147,8 @@
 
     <!-- Notification -->
     <string name="notification_channel_playback">Playback</string>
+
+    <!-- Engine error surfaced when sherpa-onnx (or whichever engine is selected) is disabled,
+         uninstalled, or otherwise unresponsive. Replaces a silent runaway-advance bug. -->
+    <string name="engine_error_action">Voice setup</string>
 </resources>
