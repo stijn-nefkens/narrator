@@ -155,32 +155,16 @@
                     app:icon="@drawable/ic_sleep"
                     app:iconSize="20dp" />
 
+                <!-- Drag left/right on the value to step speed by 0.1x; tap resets to 1.0x. -->
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/player_speed_down"
-                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    android:id="@+id/player_speed"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:contentDescription="@string/player_speed_decrease"
-                    android:text="−"
-                    android:textSize="18sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/player_speed"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="64dp"
+                    android:minWidth="96dp"
+                    android:contentDescription="@string/player_speed_a11y"
                     tools:text="1.00x" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/player_speed_up"
-                    style="@style/Widget.Material3.Button.IconButton.Outlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/player_speed_increase"
-                    android:text="+"
-                    android:textSize="18sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/player_bookmark"

@@ -13,9 +13,13 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.SeekBar
+import kotlin.math.abs
+import kotlin.math.round
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -79,9 +83,7 @@ class PlayerFragment : Fragment() {
         binding.playerNextChapter.setOnClickListener { container.narrator.skipChapterNext() }
         binding.playerPrevStep.setOnClickListener { container.narrator.skipStepPrev() }
         binding.playerNextStep.setOnClickListener { container.narrator.skipStepNext() }
-        binding.playerSpeed.setOnClickListener { container.narrator.setSpeed(1.0f) }
-        binding.playerSpeedDown.setOnClickListener { adjustSpeed(-0.05f) }
-        binding.playerSpeedUp.setOnClickListener { adjustSpeed(+0.05f) }
+        setupSpeedDragGesture()
         binding.playerSleep.setOnClickListener { openSleepDialog() }
         binding.playerBookmark.setOnClickListener { openBookmarksDialog() }
 
@@ -256,13 +258,60 @@ class PlayerFragment : Fragment() {
         }
     }
 
-    private fun adjustSpeed(delta: Float) {
-        val current = container.narrator.state.value.speed
-        // Round to the nearest 0.05 step — toInt() truncates float-drift "1.0500004"
-        // to 21/20=1.05 instead of advancing to 1.10, which is why + got stuck at 1.05.
-        val steps = kotlin.math.round((current + delta) / 0.05f).toInt()
-        val target = (steps * 0.05f).coerceIn(0.8f, 2.0f)
-        container.narrator.setSpeed(target)
+    /**
+     * Speed control gesture: tap = reset to 1.0x; horizontal drag = adjust in 0.1x steps.
+     * Replaces the previous −/+ buttons so a single chip is the whole speed control.
+     */
+    @Suppress("ClickableViewAccessibility")
+    private fun setupSpeedDragGesture() {
+        val density = resources.displayMetrics.density
+        val touchSlop = ViewConfiguration.get(requireContext()).scaledTouchSlop
+        val pxPerStep = 30f * density   // 30dp horizontal drag = one 0.1x step
+
+        var startX = 0f
+        var startSpeed = 1.0f
+        var dragging = false
+        var downAt = 0L
+
+        binding.playerSpeed.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = event.rawX
+                    startSpeed = container.narrator.state.value.speed
+                    dragging = false
+                    downAt = SystemClock.elapsedRealtime()
+                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - startX
+                    if (!dragging && abs(dx) > touchSlop) dragging = true
+                    if (dragging) {
+                        val steps = round(dx / pxPerStep).toInt()
+                        val raw = startSpeed + steps * 0.1f
+                        // Snap to a 0.1 grid to avoid float drift between strokes.
+                        val target = (round(raw / 0.1f) * 0.1f).coerceIn(0.8f, 2.0f)
+                        if (abs(target - container.narrator.state.value.speed) > 0.001f) {
+                            container.narrator.setSpeed(target)
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val elapsed = SystemClock.elapsedRealtime() - downAt
+                    if (!dragging && elapsed < 300L) {
+                        container.narrator.setSpeed(1.0f)
+                    }
+                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(false)
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(false)
+                    true
+                }
+                else -> false
+            }
+        }
     }
 
     private fun openBookmarksDialog() {
