@@ -1,0 +1,25 @@
+Player + Settings polish.
+
+Player
+- Speed control consolidated into a single chip. Tap = reset to 1.0x;
+  horizontal drag = adjust in 0.1x steps; long-press = open a Material slider
+  for explicit selection. Replaces the previous -/+ buttons.
+- Sleep timer now freezes when you pause and resumes from where it left off
+  when you press play, instead of running through pause time.
+- Sleep, 1.00x, and Mark chips share a uniform width for a balanced row.
+- Cover-tap to play/pause; tap the chapter line to jump to any chapter.
+- Bookmark dialog: long-press a row to delete.
+
+Settings
+- Theme is a segmented button row [System | Light | Dark | Black] instead of
+  stacked radios.
+- "Continue through chapter boundaries" removed (narrator always continues).
+- Tap anywhere on a settings row to toggle the switch — consistent with the
+  voice-setup engine rows.
+- Voice setup engine rows no longer light up their background; the switch is
+  the sole indication of which engine is active.
+
+Robustness
+- Speed +/- bug: previous version got stuck at 1.05 because of float drift.
+  All step math now snaps to the 0.1 grid.
+- Bookmark sanity-clamp verified on re-imports with different chunking.
