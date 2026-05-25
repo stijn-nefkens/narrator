@@ -163,4 +163,8 @@
     <string name="library_skip_patterns_label">Skip patterns (advanced)</string>
     <string name="library_skip_patterns_help">One regex per line. Any chunk that matches a pattern is dropped at load. Example: ^Continued on page</string>
     <string name="library_skip_patterns_hint">(none)</string>
+
+    <!-- Library QoL pass -->
+    <string name="library_select_all">Select all</string>
+    <string name="library_delete_one_title">Delete "%1$s"?</string>
 </resources>

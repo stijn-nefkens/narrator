@@ -17,7 +17,9 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.narrator.MainActivity
 import com.example.narrator.NarratorApp
 import com.example.narrator.R
@@ -69,6 +71,7 @@ class LibraryFragment : Fragment() {
         )
         binding.libraryList.layoutManager = LinearLayoutManager(requireContext())
         binding.libraryList.adapter = adapter
+        attachSwipeToDelete()
 
         binding.libraryFab.setOnClickListener {
             openDocument.launch(
@@ -96,10 +99,16 @@ class LibraryFragment : Fragment() {
 
         binding.libraryActionMode.setNavigationOnClickListener { exitSelectionMode() }
         binding.libraryActionMode.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.action_delete) {
-                confirmDeleteSelected()
-                true
-            } else false
+            when (item.itemId) {
+                R.id.action_delete -> { confirmDeleteSelected(); true }
+                R.id.action_edit -> { editSingleSelected(); true }
+                R.id.action_select_all -> {
+                    adapter.selectAll()
+                    updateActionModeTitle()
+                    true
+                }
+                else -> false
+            }
         }
 
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backCallback)
@@ -195,30 +204,19 @@ class LibraryFragment : Fragment() {
     }
 
     private fun onBookLongClicked(item: BookWithProgress) {
-        // In selection mode, long-press just toggles like a tap.
-        if (adapter.selectionEnabled) {
-            adapter.toggleSelected(item)
-            updateActionModeTitle()
-            return
-        }
-        // Otherwise show a small menu: Edit details / Enter selection mode.
-        val options = arrayOf(
-            getString(R.string.library_long_press_edit),
-            getString(R.string.library_long_press_select),
-        )
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.library_long_press_action)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> openRenameDialog(item)
-                    1 -> {
-                        enterSelectionMode()
-                        adapter.toggleSelected(item)
-                        updateActionModeTitle()
-                    }
-                }
-            }
-            .show()
+        // Always: enter selection mode and tick this row. No intermediate menu.
+        // (Edit moved to the pen icon in the action mode toolbar; Delete is via swipe
+        // for a single book or via the action-mode trash for many.)
+        if (!adapter.selectionEnabled) enterSelectionMode()
+        adapter.toggleSelected(item)
+        updateActionModeTitle()
+    }
+
+    private fun editSingleSelected() {
+        val ids = adapter.selectedIds()
+        if (ids.size != 1) return
+        val target = allBooks.firstOrNull { it.book.id == ids.first() } ?: return
+        openRenameDialog(target)
     }
 
     private fun openRenameDialog(item: BookWithProgress) {
@@ -302,6 +300,8 @@ class LibraryFragment : Fragment() {
     private fun updateActionModeTitle() {
         val n = adapter.selectedIds().size
         binding.libraryActionMode.title = getString(R.string.library_selected_count, n)
+        // Edit pen only makes sense for a single selection.
+        binding.libraryActionMode.menu.findItem(R.id.action_edit)?.isVisible = (n == 1)
         if (n == 0) exitSelectionMode()
     }
 
@@ -318,6 +318,43 @@ class LibraryFragment : Fragment() {
             }
             .setNegativeButton(R.string.library_cancel, null)
             .show()
+    }
+
+    /** Wires left-swipe on a library row to a delete confirmation. If the user cancels,
+     *  notifyItemChanged bounces the row back into place. Selection mode disables swipe
+     *  so people don't accidentally delete while multi-selecting. */
+    private fun attachSwipeToDelete() {
+        val callback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder,
+            ): Boolean = false
+
+            override fun getSwipeDirs(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+            ): Int = if (adapter.selectionEnabled) 0 else ItemTouchHelper.LEFT
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val pos = viewHolder.bindingAdapterPosition
+                val item = adapter.itemAt(pos) ?: return
+                AlertDialog.Builder(requireContext())
+                    .setTitle(getString(R.string.library_delete_one_title, item.book.title))
+                    .setPositiveButton(R.string.library_delete) { _, _ ->
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            container.bookRepository.deleteBook(item.book.id)
+                        }
+                    }
+                    .setNegativeButton(R.string.library_cancel) { _, _ ->
+                        // Bounce the swiped row back into place.
+                        adapter.notifyItemChanged(pos)
+                    }
+                    .setOnCancelListener { adapter.notifyItemChanged(pos) }
+                    .show()
+            }
+        }
+        ItemTouchHelper(callback).attachToRecyclerView(binding.libraryList)
     }
 
     private fun handlePickedUri(uri: Uri) {

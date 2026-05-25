@@ -1,9 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
+    <!-- Edit is only enabled when exactly one row is selected; LibraryFragment toggles
+         it via menu.findItem(R.id.action_edit).isVisible based on selection count. -->
+    <item
+        android:id="@+id/action_edit"
+        android:icon="@android:drawable/ic_menu_edit"
+        android:title="@string/library_long_press_edit"
+        android:visible="false"
+        app:showAsAction="always" />
     <item
         android:id="@+id/action_delete"
         android:icon="@android:drawable/ic_menu_delete"
         android:title="@string/library_delete"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/action_select_all"
+        android:title="@string/library_select_all"
+        app:showAsAction="never" />
 </menu>

@@ -1,0 +1,17 @@
+Library QoL pass.
+
+- Swipe a book to the left to delete it. A confirmation dialog asks
+  before anything is removed; tapping Cancel snaps the row back into
+  place.
+- Long-press now enters selection mode and ticks that row in one
+  motion. No more intermediate "Edit / Select" menu. Tap other books
+  to add them to the selection, tap × in the toolbar (or back) to exit.
+- Selected rows now show a clear coloured background instead of the
+  old alpha-dim trick that was effectively invisible.
+- A pen icon appears in the action-mode toolbar when exactly one book
+  is selected — tap it to open the Edit details dialog. Disappears
+  when 2+ books are selected (where editing doesn't make sense).
+- "Select all" added to the action mode overflow menu.
+- Search field gets a × button to clear the query.
+- Each book row now shows a small EPUB / PDF chip so you can tell at
+  a glance what kind of source you're looking at.

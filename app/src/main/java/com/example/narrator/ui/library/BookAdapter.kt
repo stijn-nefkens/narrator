@@ -70,14 +70,27 @@ class BookAdapter(
                 binding.itemCover.setImageResource(R.drawable.ic_book_placeholder)
             }
 
-            // Visual selection: dim when others are selected, accent border when this one is.
+            // Format chip — derived from the source filename extension so it stays correct
+            // even for files imported before the column was added.
+            val ext = java.io.File(item.book.epubPath).extension.uppercase()
+            binding.itemFormat.text = ext.ifBlank { "EPUB" }
+
+            // Selection state — the row background drawable responds to isActivated.
             val isSelected = selectedIds.contains(item.book.id)
-            binding.root.alpha = if (!selectionEnabled || isSelected) 1f else 0.6f
             binding.root.isActivated = isSelected
+            binding.root.alpha = 1f  // never dim; the background tint is the affordance
 
             binding.root.setOnClickListener { onClick(item) }
             binding.root.setOnLongClickListener { onLongClick(item); true }
         }
+    }
+
+    fun positionOf(bookId: Long): Int = currentList.indexOfFirst { it.book.id == bookId }
+    fun itemAt(position: Int): BookWithProgress? = currentList.getOrNull(position)
+    fun selectAll() {
+        selectedIds.clear()
+        selectedIds.addAll(currentList.map { it.book.id })
+        notifyItemRangeChanged(0, itemCount)
     }
 
     private fun formatLastOpened(ctx: android.content.Context, updatedAtMs: Long?): String {

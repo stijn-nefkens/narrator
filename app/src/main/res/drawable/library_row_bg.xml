@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Background for a library row. Driven by android:isActivated — true while the row is
+  selected in multi-select mode. The activated state uses Material's secondaryContainer
+  so it picks up the right tint in both light and dark themes.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_activated="true">
+        <color android:color="?attr/colorSecondaryContainer" />
+    </item>
+    <item>
+        <color android:color="@android:color/transparent" />
+    </item>
+</selector>
