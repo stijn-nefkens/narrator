@@ -1,0 +1,15 @@
+Sentence chunking + backup fixes.
+
+- Sentences where the source text dropped the space after a period
+  ("scale.Quite", "abroad.As") were being treated as one mega-sentence
+  by the sentence-splitter, which then hit the 500-char hard cap and
+  cut mid-word ("touc | hing"). Sentences.split now restores the
+  missing space before splitting. Applies to EPUB and PDF.
+- Sub-chunker now searches the whole sentence for clause breaks
+  instead of giving up after 150 characters. A long sentence whose
+  first comma/dash sits past 150 chars is now split at that break
+  instead of falling back to a hard cut. Cost function still biases
+  toward target ~70-char chunks.
+- Backup: PRAGMA wal_checkpoint(FULL) was being run via execSQL,
+  which rejects statements that return rows. Switched to rawQuery
+  with cursor consumption.

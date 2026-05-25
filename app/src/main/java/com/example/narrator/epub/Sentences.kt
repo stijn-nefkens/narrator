@@ -24,15 +24,27 @@ internal object Sentences {
      */
     private const val MERGE_TARGET = 80
 
+    /**
+     * When sentence-terminating punctuation sits between a lowercase letter and an upper+
+     * lowercase pair, source text occasionally drops the separating space ("scale.Quite",
+     * "abroad.As"). PDFBox does this regularly; EPUB content can do it when paragraphs are
+     * joined across element boundaries. Without that space BreakIterator can't see the
+     * sentence end, the whole paragraph fuses into one mega-sentence, and the fallback
+     * MAX_CHUNK_CHARS cut chops a word in half. Lookbehind/lookahead guard against
+     * acronyms ("U.S.", "i.e.") and all-caps runs ("U.S.A.").
+     */
+    private val missingSentenceSpace = Regex("(?<=[a-z])([.!?])(?=[A-Z][a-z])")
+
     fun split(text: String, locale: Locale = Locale.US): List<String> {
         if (text.isBlank()) return emptyList()
+        val repaired = missingSentenceSpace.replace(text, "$1 ")
         val it = BreakIterator.getSentenceInstance(locale)
-        it.setText(text)
+        it.setText(repaired)
         val raw = mutableListOf<String>()
         var start = it.first()
         var end = it.next()
         while (end != BreakIterator.DONE) {
-            val piece = text.substring(start, end).trim()
+            val piece = repaired.substring(start, end).trim()
             if (piece.isNotEmpty()) raw.add(piece)
             start = end
             end = it.next()
@@ -91,15 +103,21 @@ internal object Sentences {
     }
 
     /**
-     * Best clause break in [text], or -1 if none in range. Searches the window
-     * [TARGET/2, THRESHOLD*1.5]. Each delimiter type has a "naturalness" weight; we pick the
-     * candidate minimising `distance_to_target * weight`, so em-dashes are preferred per unit
-     * of distance but a much closer comma still wins over a far-away dash.
+     * Best clause break in [text], or -1 if none exists past TARGET/2. Scans every
+     * candidate position in the text; the cost function `distance_to_target * weight`
+     * naturally biases toward cuts near SUB_CHUNK_TARGET while still admitting later cuts
+     * when no nearby option exists. Each delimiter type carries a "naturalness" weight,
+     * so em-dashes are preferred per unit of distance but a much closer comma still wins
+     * over a far-away dash.
+     *
+     * Previously the search was capped at SUB_CHUNK_THRESHOLD * 1.5 (= 150 chars), which
+     * meant any sentence whose first clause break landed past that was hard-cut at
+     * MAX_CHUNK_CHARS — splitting words mid-character. Removing the cap lets the search
+     * find the best break across the whole sentence.
      */
     private fun findClauseCut(text: String): Int {
         val minCut = SUB_CHUNK_TARGET / 2
-        val maxCut = (SUB_CHUNK_THRESHOLD * 3 / 2).coerceAtMost(text.length)
-        if (minCut >= maxCut) return -1
+        if (minCut >= text.length) return -1
 
         var bestCut = -1
         var bestCost = Double.MAX_VALUE
@@ -107,8 +125,7 @@ internal object Sentences {
             var idx = text.indexOf(delim)
             while (idx >= 0) {
                 val cutPos = idx + delim.length
-                if (cutPos > maxCut) break
-                if (cutPos in minCut..maxCut) {
+                if (cutPos in minCut until text.length) {
                     val cost = abs(cutPos - SUB_CHUNK_TARGET) * weight
                     if (cost < bestCost) {
                         bestCost = cost

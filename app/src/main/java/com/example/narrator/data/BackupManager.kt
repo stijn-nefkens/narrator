@@ -31,8 +31,15 @@ class BackupManager(
 
     suspend fun backupTo(uri: Uri): BackupSummary = withContext(Dispatchers.IO) {
         // Force any WAL pages back into the main database file so the byte-copy below
-        // captures a complete, consistent snapshot.
-        database.readableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)")
+        // captures a complete, consistent snapshot. Has to be rawQuery — the WAL pragma
+        // returns a (busy, log, checkpointed) row, and SQLiteDatabase.execSQL rejects
+        // any statement that returns data with "execSQL ... is not allowed". Consuming the
+        // cursor is enough; we don't care about the result values.
+        runCatching {
+            database.readableDatabase.rawQuery("PRAGMA wal_checkpoint(FULL)", null).use { c ->
+                c.moveToFirst()
+            }
+        }  // checkpoint failure (e.g. non-WAL journal mode) is not fatal — proceed anyway
         var bookFiles = 0
         var coverFiles = 0
         val outStream = context.contentResolver.openOutputStream(uri)

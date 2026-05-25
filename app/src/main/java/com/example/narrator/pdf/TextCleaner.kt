@@ -24,6 +24,7 @@ internal object TextCleaner {
         var s = text
         s = stripSoftHyphens(s)
         s = expandLigatures(s)
+        s = restoreSentenceSpaces(s)
         s = replaceLinks(s)
         s = stripBulletPrefixes(s)
         s = expandAbbreviations(s)
@@ -45,6 +46,21 @@ internal object TextCleaner {
     }
 
     private fun stripSoftHyphens(s: String): String = s.replace("­", "")
+
+    /**
+     * PDFBox sometimes runs sentences together without a separating space ("scale.Quite",
+     * "abroad.As"). With no space, BreakIterator can't see a sentence boundary, so a whole
+     * paragraph fuses into one mega-sentence, hits MAX_CHUNK_CHARS, and gets cut mid-word.
+     *
+     * Heuristic: when a sentence-terminating punctuation mark sits between a lowercase
+     * letter and an uppercase-then-lowercase pair, insert a space. The lookbehind guards
+     * against acronyms like "U.S." and "i.e."; the lookahead guards against all-caps runs
+     * like "U.S.A." being broken in the middle.
+     */
+    private val missingSentenceSpace = Regex("(?<=[a-z])([.!?])(?=[A-Z][a-z])")
+
+    private fun restoreSentenceSpaces(s: String): String =
+        if (s.length < 4) s else missingSentenceSpace.replace(s, "$1 ")
 
     private val ligatures = mapOf(
         "ﬀ" to "ff", "ﬁ" to "fi", "ﬂ" to "fl",
