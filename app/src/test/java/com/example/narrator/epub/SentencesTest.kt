@@ -75,4 +75,45 @@ class SentencesTest {
         assertTrue(out.size > 1)
         assertTrue(out.all { it.length <= Sentences.MAX_CHUNK_CHARS })
     }
+
+    @Test
+    fun `inserts missing space after period between sentences`() {
+        // Regression for the 0.9.2 fix: PDF / EPUB content that drops the space after a
+        // sentence-ending period should still split into separate sentences.
+        val out = Sentences.split("First sentence.Second sentence here.Third sentence here.")
+        assertEquals(
+            "expected three chunks once the missing spaces are restored, got: $out",
+            1, // all three are short enough to merge into one utterance
+            out.size,
+        )
+        assertTrue(out[0].contains("First sentence. Second"))
+        assertTrue(out[0].contains("here. Third"))
+    }
+
+    @Test
+    fun `does not insert space inside acronyms`() {
+        // U.S. is a single token, not three sentences. Guard against false positives.
+        val out = Sentences.split("The U.S. is a country. Canada is too.")
+        assertEquals(1, out.size)
+        assertTrue("acronym should survive intact: ${out[0]}", out[0].contains("U.S."))
+    }
+
+    @Test
+    fun `sub-chunker finds break past 150 char window`() {
+        // Regression for 0.9.2: previously the search was capped at SUB_CHUNK_THRESHOLD * 1.5
+        // (= 150 chars). A long sentence whose first clause break sits past that point was
+        // hard-cut at character 500, breaking words mid-character. The fix removes the cap.
+        // First clause break here is an en-dash at ~155 chars.
+        val text = "This is a very long opening clause that goes on without any punctuation " +
+            "for quite a while before finally arriving at the first separator " +
+            "— at which point the second clause begins, and continues for a while, " +
+            "and includes a comma, and another clause."
+        val out = Sentences.split(text)
+        assertTrue("expected the sentence to be sub-chunked, got 1 chunk: $out", out.size > 1)
+        // Critically: no chunk should be hit by the 500-char hard cut.
+        assertTrue(
+            "no chunk should hit MAX_CHUNK_CHARS as a fallback hard cut, got ${out.map { it.length }}",
+            out.all { it.length < Sentences.MAX_CHUNK_CHARS },
+        )
+    }
 }

@@ -314,7 +314,8 @@ object PdfParser {
     /** Drops short paragraphs that look like image / figure / table captions. These
      *  interrupt the reading flow with single-sentence asides that often don't make sense
      *  without seeing the figure. */
-    private fun looksLikeImageCaption(paragraph: String): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun looksLikeImageCaption(paragraph: String): Boolean {
         if (paragraph.length > 220) return false  // a real paragraph is usually longer
         val captionStart = Regex(
             "(?i)^(figure|fig\\.|table|chart|graph|diagram|image|photo|illustration|plate)\\s*\\d"
@@ -324,7 +325,8 @@ object PdfParser {
 
     /** Joins PDFBox line outputs into paragraph strings: a blank line separates paragraphs,
      *  and intra-paragraph line breaks ending in `-` are dehyphenated. */
-    private fun linesToParagraphs(rawLines: List<String>): List<String> {
+    @androidx.annotation.VisibleForTesting
+    internal fun linesToParagraphs(rawLines: List<String>): List<String> {
         val paragraphs = mutableListOf<String>()
         val current = StringBuilder()
 
@@ -385,7 +387,8 @@ object PdfParser {
         return false
     }
 
-    private fun titleSuggestsFrontMatter(title: String): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun titleSuggestsFrontMatter(title: String): Boolean {
         val t = title.trim().lowercase(Locale.US)
         // Match titles like "Contents", "Table of contents", "Copyright", "Imprint",
         // "Colophon". Keep "Acknowledgements" / "Foreword" / "Preface" — those often
@@ -407,7 +410,8 @@ object PdfParser {
 
     /** Body-shape heuristic for a references / bibliography chapter: many short numbered
      *  or bracketed entries, often containing author-year patterns like "(2019)" or "et al.". */
-    private fun looksLikeReferenceList(c: Chapter): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun looksLikeReferenceList(c: Chapter): Boolean {
         if (c.chunks.size < 6) return false
         val refMarker = Regex("\\(\\d{4}[a-z]?\\)|\\[\\d+\\]|^\\s*\\d+\\.\\s|et al\\.|and others")
         val matches = c.chunks.count { refMarker.containsMatchIn(it) }
@@ -416,14 +420,16 @@ object PdfParser {
 
     /** Body-shape heuristic for an index: very short chunks (mostly one or two words plus
      *  page numbers), in alphabetical order, and the bulk of lines end with digits. */
-    private fun looksLikeIndex(c: Chapter): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun looksLikeIndex(c: Chapter): Boolean {
         if (c.chunks.size < 10) return false
         val endsInDigit = c.chunks.count { it.trimEnd().lastOrNull()?.isDigit() == true }
         val shortRatio = c.chunks.count { it.length < 60 }.toDouble() / c.chunks.size
         return endsInDigit.toDouble() / c.chunks.size > 0.5 && shortRatio > 0.7
     }
 
-    private fun looksLikeToc(c: Chapter): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun looksLikeToc(c: Chapter): Boolean {
         if (c.chunks.size < 3) return false
         val shortRatio = c.chunks.count { it.length < 40 }.toDouble() / c.chunks.size
         val chapterMarker = Regex("(?i)\\bchapter\\s+[\\dIVXLCivxlc]+\\b|^\\s*\\d+\\s")
@@ -434,7 +440,8 @@ object PdfParser {
     /** Imprint / copyright page detection. These are typically short (<800 chars) and
      *  contain at least two of: copyright symbol or "copyright" word, "all rights reserved",
      *  ISBN, "first published", "printed in", "published by". */
-    private fun looksLikeCopyrightPage(c: Chapter): Boolean {
+    @androidx.annotation.VisibleForTesting
+    internal fun looksLikeCopyrightPage(c: Chapter): Boolean {
         val totalChars = c.chunks.sumOf { it.length }
         if (totalChars > 1500) return false  // real chapter; copyright pages are short
         val body = c.chunks.joinToString(" ").lowercase(Locale.US)

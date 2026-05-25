@@ -6,9 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 /**
  * On-device backup / restore as a single ZIP file. The zip contains:
@@ -40,70 +37,30 @@ class BackupManager(
                 c.moveToFirst()
             }
         }  // checkpoint failure (e.g. non-WAL journal mode) is not fatal — proceed anyway
-        var bookFiles = 0
-        var coverFiles = 0
         val outStream = context.contentResolver.openOutputStream(uri)
             ?: throw IllegalStateException("Could not open destination")
-        outStream.use { stream ->
-            ZipOutputStream(stream.buffered()).use { zip ->
-                writeEntry(zip, "narrator.db", context.getDatabasePath("narrator.db"))
-                for (f in repository.epubDir.listFiles().orEmpty()) {
-                    writeEntry(zip, "epubs/${f.name}", f)
-                    bookFiles++
-                }
-                for (f in repository.coverDir.listFiles().orEmpty()) {
-                    writeEntry(zip, "covers/${f.name}", f)
-                    coverFiles++
-                }
-            }
+        val w = outStream.use { stream ->
+            BackupArchive.write(
+                out = stream,
+                dbFile = context.getDatabasePath("narrator.db"),
+                epubDir = repository.epubDir,
+                coverDir = repository.coverDir,
+            )
         }
-        BackupSummary(bookFiles, coverFiles)
+        BackupSummary(w.bookFiles, w.coverFiles)
     }
 
     /** Returns the number of source files restored. After this completes, the caller MUST
      *  call repository.refresh() (and rebuild any in-memory state derived from the DB). */
     suspend fun restoreFrom(uri: Uri): BackupSummary = withContext(Dispatchers.IO) {
-        // Stage everything to a temp dir first; only swap into place once we've verified the
-        // zip contains at least a narrator.db. That way a corrupt zip leaves the existing
-        // library untouched.
+        // Stage everything to a temp dir first; only swap into place once BackupArchive
+        // has verified the zip contains a narrator.db. That way a corrupt zip leaves the
+        // existing library untouched.
         val staging = File(context.cacheDir, "restore-${UUID.randomUUID()}")
-        staging.mkdirs()
         try {
-            var dbStaged = false
-            var bookFiles = 0
-            var coverFiles = 0
-            context.contentResolver.openInputStream(uri)
-                ?.use { inStream ->
-                    ZipInputStream(inStream.buffered()).use { zip ->
-                        var entry: ZipEntry? = zip.nextEntry
-                        while (entry != null) {
-                            val name = entry.name
-                            // Guard against zip-slip: only allow the three known top-level
-                            // paths and reject anything escaping with '..'.
-                            if (name.contains("..")) {
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
-                            val target = File(staging, name)
-                            target.parentFile?.mkdirs()
-                            if (!entry.isDirectory) {
-                                target.outputStream().use { zip.copyTo(it) }
-                                when {
-                                    name == "narrator.db" -> dbStaged = true
-                                    name.startsWith("epubs/") -> bookFiles++
-                                    name.startsWith("covers/") -> coverFiles++
-                                }
-                            }
-                            zip.closeEntry()
-                            entry = zip.nextEntry
-                        }
-                    }
-                }
+            val inStream = context.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Could not open source")
-            if (!dbStaged) {
-                throw IllegalStateException("Backup ZIP is missing narrator.db")
-            }
+            val r = inStream.use { BackupArchive.read(it, staging) }
 
             // Swap into place. Close the open DB handle first so we can overwrite the file.
             database.close()
@@ -117,16 +74,10 @@ class BackupManager(
             replaceDir(repository.epubDir, File(staging, "epubs"))
             replaceDir(repository.coverDir, File(staging, "covers"))
 
-            BackupSummary(bookFiles, coverFiles)
+            BackupSummary(r.bookFiles, r.coverFiles)
         } finally {
             staging.deleteRecursively()
         }
-    }
-
-    private fun writeEntry(zip: ZipOutputStream, name: String, source: File) {
-        zip.putNextEntry(ZipEntry(name))
-        source.inputStream().use { it.copyTo(zip) }
-        zip.closeEntry()
     }
 
     private fun replaceDir(target: File, sourceOrNull: File) {

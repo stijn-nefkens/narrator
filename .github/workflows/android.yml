@@ -29,6 +29,9 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest
 
+      - name: Run Android Lint
+        run: ./gradlew :app:lintDebug
+
       - name: Decode signing keystore
         if: startsWith(github.ref, 'refs/tags/v')
         env:

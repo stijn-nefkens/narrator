@@ -1,0 +1,22 @@
+Stabilization pass — no user-visible behavior changes.
+
+- Bug fix in PDF parser: abbreviations at the end of a sentence
+  ("et al.") were eating the trailing period and breaking sentence
+  splitting on the next chunk. Period is now preserved.
+- Notifications wrapped in a runtime POST_NOTIFICATIONS check so the
+  service path stays robust on Android 13+ if the user denied the
+  permission.
+
+Under the hood:
+
+- 30+ new unit tests covering Sentences (missing-space restoration,
+  sub-chunker), TextCleaner (every transform), PdfParser heuristics
+  (TOC / references / index / copyright / captions), and BackupArchive
+  (round-trip, missing-db rejection, zip-slip).
+- Android Lint runs in CI; baseline absorbs existing warnings.
+- Root-level CHANGELOG.md and CLAUDE.md for project history and
+  contributor / future-AI onboarding.
+- docs/ folder with F-Droid submission steps and CI release-signing
+  setup instructions.
+- Screenshots directory under metadata/en-US/images/phoneScreenshots/
+  ready for F-Droid listing.

@@ -1,18 +1,22 @@
 package com.example.narrator.tts
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.IBinder
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.narrator.MainActivity
 import com.example.narrator.NarratorApp
 import com.example.narrator.R
@@ -85,7 +89,16 @@ class NarrationService : Service() {
                 stopForeground(STOP_FOREGROUND_DETACH)
                 startedForeground = false
             }
-            NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+            // POST_NOTIFICATIONS is runtime-requested in MainActivity. If the user denied
+            // it (or never opened the app on Android 13+), notify() throws SecurityException.
+            // Silently drop in that case — the foreground service path above doesn't need
+            // permission, so playback still works without a notification.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+            }
         }
     }
 

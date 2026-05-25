@@ -1,0 +1,189 @@
+# Changelog
+
+All notable changes per release. Newest at top. Format loosely follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## 0.10.1 — 2026-05-25
+
+Stabilization pass. No user-visible behavior changes.
+
+- Tests added for `Sentences` (missing-space restoration, sub-chunker
+  no-cap), `TextCleaner` (every transform), and `PdfParser` heuristics
+  (TOC / references / index / copyright / image-caption detection).
+- `BackupArchive` extracted from `BackupManager` so the ZIP read/write
+  is unit-testable without Android `Context`. Round-trip, empty-library,
+  missing-DB, and zip-slip cases covered.
+- Bug fix uncovered by tests: abbreviation expansion at end of sentence
+  ("et al.") was consuming the period, breaking sentence splitting on
+  the next chunk. Replacement now preserves a trailing period when
+  followed by end-of-string.
+- Repo hygiene: this CHANGELOG, `CLAUDE.md`, F-Droid screenshots and
+  submission instructions, release-signing docs, and Lint in CI.
+
+## 0.10.0 — 2026-05-25
+
+Ten small QoL improvements bundled together. Schema migrates v3 → v4.
+
+- **Library**: mark a book as finished (Edit details toggle, "FINISHED"
+  chip on the row, slight dim). Reset progress button. Empty-state
+  shows a prominent Import button. Long-press a second row to extend
+  the selection range (shift-click style).
+- **Player**: one-shot tooltip explains the speed-chip gestures on
+  first open. Sleep timer fades audio over the last 15s instead of
+  cutting mid-sentence. Long-press a chapter in the chapter navigator
+  to bookmark its start.
+- **Audio**: notification chimes now duck the narrator to ~30% instead
+  of pausing. Phone calls / longer interruptions still pause + auto-
+  resume.
+- **Settings**: Snackbar with Share action after backup. Backup
+  filename includes `_HH-mm` to avoid same-day collisions.
+
+## 0.9.2 — 2026-05-25
+
+Sentence chunking + backup fixes.
+
+- `Sentences.split` restores missing post-period spaces ("scale.Quite")
+  before BreakIterator runs, so long paragraphs no longer fuse and get
+  hard-cut mid-word.
+- Sub-chunker drops the 150-char upper search bound; cost function
+  biases naturally toward target without losing long sentences whose
+  first clause break sits past the cap.
+- `BackupManager` runs `PRAGMA wal_checkpoint(FULL)` via `rawQuery`
+  (cursor-consumed) instead of `execSQL` which rejects pragmas that
+  return rows.
+
+## 0.9.1 — 2026-05-25
+
+Tightening pass on the 0.9.0 batch.
+
+- Settings: backup + restore merged into a single "Library" section
+  with side-by-side buttons.
+- Library: Continue card removed; the mini-player above the bottom nav
+  covers the same affordance.
+- Player: "Synthesising…" message replaces the remaining-time line in
+  place instead of reserving its own row; caption top margin trimmed.
+  Player no longer scrolls on a typical 6.x phone screen.
+
+## 0.9.0 — 2026-05-25
+
+QoL pass.
+
+- Swipe-to-delete now removes the row immediately with a Snackbar
+  Undo. Bulk delete still confirms upfront.
+- Mini-player above the bottom nav on Library / Settings tabs.
+- Chapter-boundary dots on the player scrub bar.
+- Library backup / restore as a single ZIP.
+- Bookmark export from the bookmarks dialog as plain text.
+- EPUB / PDF chip switched to a filled badge after the outlined version
+  kept clipping the bottom stroke.
+
+## 0.8.0 — 2026-05-25
+
+Library QoL.
+
+- Swipe a row to the left to delete it.
+- Long-press enters selection mode and ticks the row in one motion.
+- Selected rows show a clear colored background.
+- Pen icon in the action toolbar opens Edit details when exactly one
+  row is selected.
+- "Select all" in the action mode overflow.
+- Search clear (×) button.
+- EPUB / PDF chip on each book row.
+
+## 0.7.0 — 2026-05-25
+
+PDF import escape hatches.
+
+- Page-range dialog at PDF import (PDFs with > 1 page).
+- Import preview lists chapters with first ~160 characters each
+  before the book lands in the library.
+- Per-book skip patterns (one regex per line) editable from Edit
+  details; matching chunks are dropped at load.
+
+## 0.6.0 — 2026-05-25
+
+PDF support.
+
+New parser backed by PDFBox-Android. Imports route by mime type; the
+existing chunker + TTS pipeline consume the same `epub.Book` structure.
+
+Cleanup work:
+- Chapter detection from PDF outline; font-size heading heuristic
+  fallback.
+- Front-matter / back-matter skip (copyright, TOC, references,
+  bibliography, index, glossary).
+- Running header / footer / page-number strip.
+- End-of-line hyphen rejoin; soft hyphen removal.
+- Ligature normalisation (ﬁ → fi, ﬂ → fl, ...).
+- Bullet glyph and weird-whitespace cleanup.
+- URL / email replacement with spoken placeholders.
+- Common abbreviation expansion; Roman numerals in chapter headings.
+- Footnote suppression (font-size based).
+- Image / table caption strip.
+- Table-region detection and drop.
+- Handles "encrypted" PDFs that are actually readable with an empty
+  password (typical publisher-PDF pattern).
+
+## 0.5.0 — 2026-05-25
+
+Cascading TTS-synth failure handling.
+
+When the selected engine becomes disabled or unbound, every chunk's
+synth fails. Before, this caused position to race forward silently
+("10x playback"). Now:
+
+- FilePipeline halts after 3 consecutive synth_error results.
+- Pause + drop the queue + fire `onSynthCascadeFailure` callback.
+- Narrator surfaces an `engineError` in state; Player shows a Snackbar
+  with a Voice setup shortcut.
+
+## 0.4.0 — 2026-05-25
+
+Voice setup nudge.
+
+- Voice setup row moved to the top of Settings.
+- "Get a better voice" replaced with "Install natural voice (Kokoro)"
+  which one-tap downloads the sherpa-onnx Kokoro APK directly from the
+  k2-fsa HuggingFace mirror.
+- RHVoice suggestion dropped.
+
+## 0.3.0 — 2026-05-25
+
+Player + Settings polish.
+
+- Speed control consolidated into one chip: tap = reset to 1.0×, drag
+  = step by 0.1×, long-press = slider dialog.
+- Sleep timer freezes when paused, resumes on play.
+- Sleep / 1.00× / Mark chips share a uniform width.
+- Cover-tap to play/pause; tap the chapter line to jump.
+- Bookmark dialog: long-press a row to delete.
+- Settings: theme moved to a segmented button row. "Continue through
+  chapter boundaries" removed (narrator always continues). Voice setup
+  rows no longer light up the background.
+
+## 0.2.0 — 2026-05-25
+
+Phase 2: foreground service, full controls, settings polish.
+
+- Foreground media service with lock-screen / notification controls.
+- Speed control with per-book memory + global default.
+- Skip controls (sentence / paragraph / chapter).
+- Scrub bar.
+- Sleep timer (end-of-chapter, 15/30/60 minutes, custom).
+- Bookmarks (resume + named).
+- Audio focus on phone calls.
+- AMOLED true-black theme; theme selector.
+- File-manager intent integration.
+- F-Droid metadata layout.
+- GitHub Actions tag-triggered release workflow.
+
+## 0.1.0 — 2026-05-23
+
+Phase 1 MVP.
+
+- EPUB import + parsing (chapters, cover, sentence/clause chunking).
+- On-device narration via TextToSpeech with sherpa-onnx Kokoro support.
+- Library list with progress + rename / delete.
+- Single bookmark per book (resume position).
+- Settings: speed default, pitch, skip increment, theme.
+- Voice setup flow on first run.

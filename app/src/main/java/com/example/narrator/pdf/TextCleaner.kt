@@ -109,23 +109,34 @@ internal object TextCleaner {
 
     // Small, focused abbreviation list. Resist the temptation to grow this without test
     // cases — every new entry is a chance to mis-expand something in international text.
+    // Periods are matched but preserved in the replacement so end-of-sentence abbreviations
+    // ("et al.") keep their sentence terminator and Sentences.split sees the boundary.
     private val abbreviations = listOf(
         Regex("\\bDr\\.") to "Doctor",
         Regex("\\bMr\\.") to "Mister",
         Regex("\\bMrs\\.") to "Misses",
         Regex("\\bMs\\.") to "Miss",
         Regex("\\bSt\\.") to "Saint",
-        Regex("\\bvs\\.") to "versus",
-        Regex("\\bvs\\b") to "versus",
+        Regex("\\bvs\\.?") to "versus",
         Regex("\\betc\\.") to "et cetera",
         Regex("\\be\\.g\\.") to "for example",
         Regex("\\bi\\.e\\.") to "that is",
         Regex("\\bet al\\.") to "and others",
     )
 
+    /** True if the abbreviation pattern is followed by a sentence-terminating context —
+     *  i.e. end-of-string or whitespace then end-of-string. In that case the abbreviation
+     *  match consumed the sentence period; the replacement must add it back. */
     private fun expandAbbreviations(s: String): String {
         var result = s
-        for ((re, replacement) in abbreviations) result = result.replace(re, replacement)
+        for ((re, replacement) in abbreviations) {
+            result = re.replace(result) { m ->
+                val end = m.range.last + 1
+                val followedByEnd = end >= result.length || result.substring(end).isBlank()
+                val needsTerminator = m.value.endsWith(".") && followedByEnd
+                if (needsTerminator) "$replacement." else replacement
+            }
+        }
         return result
     }
 

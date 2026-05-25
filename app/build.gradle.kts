@@ -29,8 +29,8 @@ android {
         applicationId = "com.example.narrator"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.10.0"
+        versionCode = 13
+        versionName = "0.10.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -63,6 +63,15 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+
+    lint {
+        // CI runs `:app:lintDebug` and fails on errors. Warnings are surfaced in the
+        // report but don't block. Update lint-baseline.xml with `./gradlew :app:updateLintBaseline`
+        // after intentional new warnings.
+        warningsAsErrors = false
+        abortOnError = true
+        baseline = file("lint-baseline.xml")
     }
 }
 
