@@ -80,7 +80,8 @@
     <string name="bookmarks_long_press_hint">Long-press to delete</string>
     <string name="player_bookmark_label">Mark</string>
     <string name="player_chapter_dialog_title">Jump to chapter</string>
-    <string name="player_speed_a11y">Playback speed. Tap to reset, drag left or right to adjust.</string>
+    <string name="player_speed_a11y">Playback speed. Tap to reset, drag left or right to adjust, long-press for a slider.</string>
+    <string name="player_speed_dialog_title">Playback speed</string>
     <string name="bookmarks_item_format">Chapter %1$d · %2$d%%</string>
 
     <!-- Library sort + search + continue + multi-select -->

@@ -83,7 +83,7 @@ class PlayerFragment : Fragment() {
         binding.playerNextChapter.setOnClickListener { container.narrator.skipChapterNext() }
         binding.playerPrevStep.setOnClickListener { container.narrator.skipStepPrev() }
         binding.playerNextStep.setOnClickListener { container.narrator.skipStepNext() }
-        setupSpeedDragGesture()
+        setupSpeedGesture()
         binding.playerSleep.setOnClickListener { openSleepDialog() }
         binding.playerBookmark.setOnClickListener { openBookmarksDialog() }
 
@@ -259,37 +259,55 @@ class PlayerFragment : Fragment() {
     }
 
     /**
-     * Speed control gesture: tap = reset to 1.0x; horizontal drag = adjust in 0.1x steps.
-     * Replaces the previous −/+ buttons so a single chip is the whole speed control.
+     * Speed control gesture: tap = reset to 1.0x; horizontal drag = adjust in 0.1x steps;
+     * long-press = open a slider dialog for explicit value picking.
+     *
+     * We intercept all events (return true on DOWN), so Android's stock click and long-click
+     * machinery doesn't run for this view. The handler tracks both itself via a postDelayed
+     * runnable that fires after the standard long-press timeout if no drag happened.
      */
     @Suppress("ClickableViewAccessibility")
-    private fun setupSpeedDragGesture() {
+    private fun setupSpeedGesture() {
         val density = resources.displayMetrics.density
         val touchSlop = ViewConfiguration.get(requireContext()).scaledTouchSlop
         val pxPerStep = 30f * density   // 30dp horizontal drag = one 0.1x step
+        val longPressMs = ViewConfiguration.getLongPressTimeout().toLong()
+        val pressHandler = Handler(Looper.getMainLooper())
 
         var startX = 0f
         var startSpeed = 1.0f
         var dragging = false
+        var longPressFired = false
         var downAt = 0L
 
-        binding.playerSpeed.setOnTouchListener { _, event ->
+        binding.playerSpeed.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = event.rawX
                     startSpeed = container.narrator.state.value.speed
                     dragging = false
+                    longPressFired = false
                     downAt = SystemClock.elapsedRealtime()
-                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(true)
+                    pressHandler.postDelayed({
+                        if (!dragging) {
+                            longPressFired = true
+                            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                            openSpeedDialog()
+                        }
+                    }, longPressMs)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (longPressFired) return@setOnTouchListener true
                     val dx = event.rawX - startX
-                    if (!dragging && abs(dx) > touchSlop) dragging = true
+                    if (!dragging && abs(dx) > touchSlop) {
+                        dragging = true
+                        pressHandler.removeCallbacksAndMessages(null)
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
                     if (dragging) {
                         val steps = round(dx / pxPerStep).toInt()
                         val raw = startSpeed + steps * 0.1f
-                        // Snap to a 0.1 grid to avoid float drift between strokes.
                         val target = (round(raw / 0.1f) * 0.1f).coerceIn(0.8f, 2.0f)
                         if (abs(target - container.narrator.state.value.speed) > 0.001f) {
                             container.narrator.setSpeed(target)
@@ -298,20 +316,43 @@ class PlayerFragment : Fragment() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    val elapsed = SystemClock.elapsedRealtime() - downAt
-                    if (!dragging && elapsed < 300L) {
-                        container.narrator.setSpeed(1.0f)
+                    pressHandler.removeCallbacksAndMessages(null)
+                    if (!dragging && !longPressFired) {
+                        val elapsed = SystemClock.elapsedRealtime() - downAt
+                        if (elapsed < longPressMs) container.narrator.setSpeed(1.0f)
                     }
-                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(false)
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
-                    binding.playerSpeed.parent?.requestDisallowInterceptTouchEvent(false)
+                    pressHandler.removeCallbacksAndMessages(null)
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
                     true
                 }
                 else -> false
             }
         }
+    }
+
+    private fun openSpeedDialog() {
+        val ctx = requireContext()
+        val slider = com.google.android.material.slider.Slider(ctx).apply {
+            valueFrom = 0.8f
+            valueTo = 2.0f
+            stepSize = 0.1f
+            value = container.narrator.state.value.speed.coerceIn(0.8f, 2.0f)
+            addOnChangeListener { _, v, _ -> container.narrator.setSpeed(v) }
+        }
+        val wrapper = android.widget.FrameLayout(ctx).apply {
+            val pad = (resources.displayMetrics.density * 24).toInt()
+            setPadding(pad, pad, pad, 0)
+            addView(slider)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.player_speed_dialog_title)
+            .setView(wrapper)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun openBookmarksDialog() {
