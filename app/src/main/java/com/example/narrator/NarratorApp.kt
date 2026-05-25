@@ -7,6 +7,7 @@ import com.example.narrator.data.BookRepository
 import com.example.narrator.data.NarratorDatabase
 import com.example.narrator.data.ThemeMode
 import com.example.narrator.tts.Narrator
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,10 @@ class NarratorApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // PDFBox-Android needs its resource loader initialised once on app startup; without
+        // this PDDocument.load() throws when it tries to read its bundled CMaps and font
+        // fallbacks. Safe to call multiple times.
+        PDFBoxResourceLoader.init(applicationContext)
         container = AppContainer(this)
         container.preferences.applyTheme()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

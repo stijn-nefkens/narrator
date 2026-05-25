@@ -3,8 +3,10 @@ package com.example.narrator.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.example.narrator.epub.Book
 import com.example.narrator.epub.EpubParseException
 import com.example.narrator.epub.EpubParser
+import com.example.narrator.pdf.PdfParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -34,24 +36,28 @@ class BookImporter(
 ) {
     suspend fun importFromUri(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
         // Capture the picker's display name BEFORE we copy the file — needed as a fallback
-        // for the title when the EPUB has no metadata title (per spec §5.1).
+        // for the title when the source has no metadata title (per spec §5.1).
         val originalDisplayName = displayNameFor(uri)
 
-        val epubFile = repository.newEpubFile()
+        val format = detectFormat(uri, originalDisplayName)
+        val sourceFile = repository.newSourceFile(format.extension)
         try {
-            copyUriToFile(uri, epubFile)
+            copyUriToFile(uri, sourceFile)
         } catch (e: Exception) {
-            epubFile.delete()
+            sourceFile.delete()
             return@withContext ImportResult.Failed(e.message ?: "Could not read source file")
         }
 
-        val parsed = try {
-            EpubParser.parse(epubFile)
+        val parsed: Book = try {
+            when (format) {
+                SourceFormat.EPUB -> EpubParser.parse(sourceFile)
+                SourceFormat.PDF -> PdfParser.parse(sourceFile)
+            }
         } catch (e: EpubParseException) {
-            epubFile.delete()
-            return@withContext ImportResult.Failed(e.message ?: "Could not parse EPUB")
+            sourceFile.delete()
+            return@withContext ImportResult.Failed(e.message ?: "Could not parse file")
         } catch (e: Exception) {
-            epubFile.delete()
+            sourceFile.delete()
             return@withContext ImportResult.Failed(e.message ?: "Unexpected parse error")
         }
 
@@ -73,7 +79,7 @@ class BookImporter(
         val pending = PendingImport(
             title = finalTitle,
             author = parsed.author,
-            epubPath = epubFile.absolutePath,
+            epubPath = sourceFile.absolutePath,
             coverPath = coverFile?.absolutePath,
             totalChunks = totalChunks,
         )
@@ -145,6 +151,24 @@ class BookImporter(
         "image/webp" -> "webp"
         "image/svg+xml" -> "svg"
         else -> "jpg"
+    }
+
+    /** Picks parser by MIME first, then by filename extension. Defaults to EPUB so legacy
+     *  imports (where the picker returns application/octet-stream) keep working. */
+    private fun detectFormat(uri: Uri, displayName: String?): SourceFormat {
+        val mime = context.contentResolver.getType(uri)?.lowercase()
+        if (mime == "application/pdf") return SourceFormat.PDF
+        if (mime == "application/epub+zip") return SourceFormat.EPUB
+        val ext = displayName?.substringAfterLast('.', "")?.lowercase()
+        return when (ext) {
+            "pdf" -> SourceFormat.PDF
+            else -> SourceFormat.EPUB
+        }
+    }
+
+    private enum class SourceFormat(val extension: String) {
+        EPUB("epub"),
+        PDF("pdf"),
     }
 
     private companion object {

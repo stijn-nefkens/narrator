@@ -212,6 +212,12 @@ class BookRepository(
     /** Generates a unique on-disk path for a freshly imported EPUB file. */
     fun newEpubFile(): File = File(epubDir, "${UUID.randomUUID()}.epub")
 
+    /** Generates a unique on-disk path for a freshly imported source file with the given
+     *  extension (e.g. "pdf", "epub"). The directory is shared — the column COL_EPUB_PATH
+     *  stores the full path, so the type is recoverable from the extension. */
+    fun newSourceFile(extension: String): File =
+        File(epubDir, "${UUID.randomUUID()}.${extension.trimStart('.')}")
+
     /** Generates a unique on-disk path for a cover image. */
     fun newCoverFile(extension: String): File =
         File(coverDir, "${UUID.randomUUID()}.${extension.trimStart('.')}")

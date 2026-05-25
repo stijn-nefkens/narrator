@@ -31,15 +31,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Open an EPUB sent to us by another app's share menu. -->
+            <!-- Open an EPUB or PDF sent to us by another app's share menu. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/pdf" />
             </intent-filter>
-            <!-- Open EPUB files tapped in a file manager. Two filters: explicit mime type
-                 (well-behaved file managers) and *.epub path pattern (managers that send
-                 application/octet-stream or "*/*"). -->
+            <!-- Open EPUB / PDF files tapped in a file manager. Two filters: explicit mime
+                 type (well-behaved file managers) and *.epub / *.pdf path patterns (managers
+                 that send application/octet-stream or "*/*"). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -47,6 +48,7 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/pdf" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -59,6 +61,9 @@
                 <data android:pathPattern=".*\\.epub" />
                 <data android:pathPattern=".*\\..*\\.epub" />
                 <data android:pathPattern=".*\\..*\\..*\\.epub" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\.pdf" />
             </intent-filter>
         </activity>
 

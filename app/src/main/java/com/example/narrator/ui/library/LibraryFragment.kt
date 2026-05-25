@@ -70,7 +70,13 @@ class LibraryFragment : Fragment() {
         binding.libraryList.adapter = adapter
 
         binding.libraryFab.setOnClickListener {
-            openDocument.launch(arrayOf("application/epub+zip", "application/octet-stream"))
+            openDocument.launch(
+                arrayOf(
+                    "application/epub+zip",
+                    "application/pdf",
+                    "application/octet-stream",
+                )
+            )
         }
 
         binding.librarySearch.addTextChangedListener(object : TextWatcher {

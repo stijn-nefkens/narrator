@@ -9,7 +9,9 @@ import android.speech.tts.TextToSpeech
 import com.example.narrator.data.AppPreferences
 import com.example.narrator.data.BookRepository
 import com.example.narrator.data.SkipIncrement
+import com.example.narrator.epub.Book
 import com.example.narrator.epub.EpubParser
+import com.example.narrator.pdf.PdfParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -194,8 +196,8 @@ class Narrator(
         preferences.lastOpenedBookId = bookId
         val bookmark = repository.getBookmark(bookId)
 
-        val parsed = try {
-            withContext(Dispatchers.IO) { EpubParser.parse(File(book.epubPath)) }
+        val parsed: Book = try {
+            withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath)) }
         } catch (e: Exception) {
             android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
             // Leave state unchanged so the player keeps whatever was previously loaded.
@@ -638,5 +640,15 @@ class Narrator(
         tts?.stop()
         tts?.shutdown()
         tts = null
+    }
+
+    /** Picks the parser by source file extension. Books are stored on disk with their
+     *  original extension preserved, so the source format is recoverable at load time. */
+    private fun parseBookFile(file: File): Book {
+        val ext = file.extension.lowercase()
+        return when (ext) {
+            "pdf" -> PdfParser.parse(file)
+            else -> EpubParser.parse(file)
+        }
     }
 }

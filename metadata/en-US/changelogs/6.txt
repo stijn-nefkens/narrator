@@ -1,0 +1,31 @@
+PDF support.
+
+You can now import PDFs alongside EPUBs. The picker in the Library
+accepts .pdf files, and the system "Open with" menu lists Narrator
+for PDFs from your file manager.
+
+Text-extraction quality fixes that make PDF narration listenable:
+
+- Front-matter: copyright pages, tables of contents, references,
+  bibliographies, indexes, and glossaries are skipped automatically.
+- Running headers, footers, and page numbers are stripped per page.
+- Words split across a line break by an end-of-line hyphen are rejoined.
+- Soft hyphens (invisible characters used for justified text) are
+  removed so they don't become audible syllable breaks.
+- Ligatures (ﬁ ﬂ ﬃ etc.) are normalised to plain letters.
+- Bullet glyphs at the start of lines are stripped.
+- Common abbreviations are expanded so the narrator says "Doctor"
+  instead of "dee", "for example" instead of "ee gee", etc.
+- Roman numerals in chapter headings ("Chapter XIV") are converted to
+  Arabic so they don't get spelled letter-by-letter.
+- URLs and email addresses become spoken placeholders ("link", "email
+  address") instead of getting spelled out character-by-character.
+- Image, figure, and table captions are skipped.
+- Tables (detected by repeated column-aligned rows) are dropped so
+  they don't get read cell-by-cell.
+- Footnotes (text in smaller-than-body font) are dropped.
+
+Chapters come from the PDF's table-of-contents when present, or are
+inferred from font-size jumps for PDFs that don't have one.
+
+Note: ~12 MB APK size increase from the PDFBox-Android library.
