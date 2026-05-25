@@ -47,8 +47,6 @@
     <string name="settings_theme_system_short">System</string>
     <string name="settings_theme_amoled_short">Black</string>
     <string name="settings_theme_system">Follow system</string>
-    <string name="settings_continue">Continue through chapter boundaries</string>
-    <string name="settings_continue_summary">Off = playback stops at each chapter end</string>
     <string name="settings_voice_setup">Voice setup</string>
     <string name="settings_voice_setup_summary">Choose which on-device voice to use</string>
     <string name="settings_about">About</string>

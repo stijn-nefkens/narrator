@@ -49,8 +49,10 @@ sealed class SleepTimer {
     data object Off : SleepTimer()
     /** Pause at the chapter boundary in the current chunk's chapter (not the next). */
     data object EndOfChapter : SleepTimer()
-    /** Pause when SystemClock.elapsedRealtime() reaches [endsAtMs]. */
+    /** Pause when SystemClock.elapsedRealtime() reaches [endsAtMs]. Only ticks while playing. */
     data class At(val endsAtMs: Long) : SleepTimer()
+    /** The timer is suspended (narrator paused). Holds the unconsumed time for later resume. */
+    data class Paused(val remainingMs: Long) : SleepTimer()
 }
 
 class Narrator(
@@ -220,14 +222,44 @@ class Narrator(
     fun setSleepTimer(option: SleepTimer) {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
-        _state.value = _state.value.copy(sleepTimer = option)
-        if (option is SleepTimer.At) {
-            val delayMs = (option.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-            sleepTimerJob = scope.launch {
-                kotlinx.coroutines.delay(delayMs)
-                pause()
-                _state.value = _state.value.copy(sleepTimer = SleepTimer.Off)
-            }
+        // If the narrator isn't playing yet, start in Paused so the countdown doesn't run
+        // before the user actually presses play.
+        val effective = if (option is SleepTimer.At && !_state.value.isPlaying) {
+            val remaining = (option.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            SleepTimer.Paused(remaining)
+        } else option
+        _state.value = _state.value.copy(sleepTimer = effective)
+        if (effective is SleepTimer.At) startSleepCountdown(effective)
+    }
+
+    private fun startSleepCountdown(at: SleepTimer.At) {
+        val delayMs = (at.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        sleepTimerJob = scope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            pause()
+            _state.value = _state.value.copy(sleepTimer = SleepTimer.Off)
+        }
+    }
+
+    /** Freeze the countdown timer when narrator pauses; saved time resumes on play. */
+    private fun suspendSleepCountdown() {
+        val s = _state.value.sleepTimer
+        if (s is SleepTimer.At) {
+            sleepTimerJob?.cancel()
+            sleepTimerJob = null
+            val remaining = (s.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            _state.value = _state.value.copy(sleepTimer = SleepTimer.Paused(remaining))
+        }
+    }
+
+    /** Convert a paused sleep timer back into an active deadline when narrator resumes. */
+    private fun resumeSleepCountdown() {
+        val s = _state.value.sleepTimer
+        if (s is SleepTimer.Paused) {
+            val endsAt = SystemClock.elapsedRealtime() + s.remainingMs
+            val at = SleepTimer.At(endsAt)
+            _state.value = _state.value.copy(sleepTimer = at)
+            startSleepCountdown(at)
         }
     }
 
@@ -337,6 +369,7 @@ class Narrator(
             return
         }
         _state.value = s.copy(isPlaying = true)
+        resumeSleepCountdown()
         NarrationService.start(context)
         if (!ttsReady) {
             pendingPlay = true
@@ -358,6 +391,7 @@ class Narrator(
         pipeline?.pause()
         pendingPlay = false
         _state.value = _state.value.copy(isPlaying = false)
+        suspendSleepCountdown()
         // Only abandon focus on a "real" pause — if we paused due to a transient loss we want
         // to keep our claim so we get GAIN back when the interruption ends.
         if (!pausedByFocusLoss) abandonAudioFocus()
@@ -463,21 +497,19 @@ class Narrator(
         repeat(count) {
             val next = advanceChunk(loaded, pos, 1)
             if (next == pos) return
-            if (next.chapterIndex != pos.chapterIndex && !preferences.continueThroughChapters) return
             val text = chunkTextAt(next) ?: return
             pipeline?.queueNext(text, utteranceId(next), next.chapterIndex)
             pos = next
         }
     }
 
-    /** Position [ahead] chunks past [from], or null if we'd cross a boundary that blocks us. */
+    /** Position [ahead] chunks past [from], or null if past the end. */
     private fun positionAhead(from: Position, ahead: Int): Position? {
         val loaded = _state.value.loaded ?: return null
         var pos = from
         repeat(ahead) {
             val next = advanceChunk(loaded, pos, 1)
             if (next == pos) return null
-            if (next.chapterIndex != pos.chapterIndex && !preferences.continueThroughChapters) return null
             pos = next
         }
         return pos
@@ -541,13 +573,6 @@ class Narrator(
             return
         }
         val crossedChapter = nextPos.chapterIndex != s.position.chapterIndex
-        if (crossedChapter && !preferences.continueThroughChapters) {
-            // Park at start of next chapter. We did not prefetch across the boundary, so the
-            // engine queue is empty and playback genuinely stops here.
-            _state.value = s.copy(position = nextPos, isPlaying = false)
-            persistBookmark()
-            return
-        }
         // Sleep timer "End of chapter": pause at the boundary, then clear the timer.
         if (crossedChapter && s.sleepTimer is SleepTimer.EndOfChapter) {
             _state.value = s.copy(

@@ -37,7 +37,6 @@ class SettingsFragment : Fragment() {
         wirePitch()
         wireSkipIncrement()
         wireTheme()
-        wireContinue()
 
         binding.settingsVoiceSetupRow.setOnClickListener {
             startActivity(VoiceSetupActivity.intent(requireContext(), firstRun = false))
@@ -129,14 +128,4 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun wireContinue() {
-        binding.settingsContinueSwitch.isChecked = prefs.continueThroughChapters
-        binding.settingsContinueSwitch.setOnCheckedChangeListener { _, checked ->
-            prefs.continueThroughChapters = checked
-        }
-        // Tapping anywhere on the row toggles the switch — consistent with voice-setup rows.
-        binding.settingsContinueRow.setOnClickListener {
-            binding.settingsContinueSwitch.isChecked = !binding.settingsContinueSwitch.isChecked
-        }
-    }
 }

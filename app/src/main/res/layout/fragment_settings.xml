@@ -211,50 +211,6 @@
             android:layout_marginVertical="4dp"
             android:background="?android:attr/listDivider" />
 
-        <!-- Continue through chapters — whole row tappable (consistent with voice setup rows) -->
-        <LinearLayout
-            android:id="@+id/settings_continue_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:gravity="center_vertical"
-            android:clickable="true"
-            android:focusable="true">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/settings_continue"
-                    android:textAppearance="?attr/textAppearanceSubtitle1" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/settings_continue_summary"
-                    android:textAppearance="?attr/textAppearanceBody2" />
-            </LinearLayout>
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/settings_continue_switch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textOn=""
-                android:textOff="" />
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginVertical="4dp"
-            android:background="?android:attr/listDivider" />
-
         <!-- Voice setup -->
         <LinearLayout
             android:id="@+id/settings_voice_setup_row"

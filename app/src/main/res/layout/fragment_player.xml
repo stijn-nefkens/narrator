@@ -138,7 +138,8 @@
                     android:contentDescription="@string/player_next_chapter" />
             </LinearLayout>
 
-            <!-- Single action row: [Sleep] [− 1.00x +] [Mark] -->
+            <!-- Single action row: [Sleep] [1.00x] [Mark]. All three buttons share a 96dp
+                 min-width so the chip line stays visually balanced. -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -148,12 +149,13 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/player_sleep"
-                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:contentDescription="@string/player_sleep_off"
+                    android:minWidth="96dp"
                     app:icon="@drawable/ic_sleep"
-                    app:iconSize="20dp" />
+                    app:iconSize="18dp"
+                    android:text="@string/player_sleep_off" />
 
                 <!-- Drag left/right on the value to step speed by 0.1x; tap resets to 1.0x. -->
                 <com.google.android.material.button.MaterialButton
@@ -168,13 +170,14 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/player_bookmark"
-                    style="@style/Widget.Material3.Button.IconButton.Outlined"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:contentDescription="@string/bookmarks_open"
+                    android:minWidth="96dp"
                     app:icon="@drawable/ic_bookmark"
-                    app:iconSize="20dp" />
+                    app:iconSize="18dp"
+                    android:text="@string/player_bookmark_label" />
             </LinearLayout>
 
             <TextView

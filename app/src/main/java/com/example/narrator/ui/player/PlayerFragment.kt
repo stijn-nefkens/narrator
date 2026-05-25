@@ -443,10 +443,10 @@ class PlayerFragment : Fragment() {
             getString(R.string.sleep_dialog_custom),
         )
         val current = container.narrator.state.value.sleepTimer
-        val selected = when {
-            current is SleepTimer.EndOfChapter -> 1
-            current is SleepTimer.At -> -1
-            else -> 0
+        val selected = when (current) {
+            SleepTimer.Off -> 0
+            SleepTimer.EndOfChapter -> 1
+            is SleepTimer.At, is SleepTimer.Paused -> -1
         }
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.sleep_dialog_title)
@@ -493,14 +493,17 @@ class PlayerFragment : Fragment() {
         val sleepPart = when (sleep) {
             SleepTimer.Off -> ""
             SleepTimer.EndOfChapter -> " · " + getString(R.string.player_sleep_end_of_chapter)
-            is SleepTimer.At -> {
-                val remainingMs = (sleep.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)
-                val mins = (remainingMs / 60_000L).toInt()
-                val secs = ((remainingMs % 60_000L) / 1000L).toInt()
-                " · " + getString(R.string.player_sleep_countdown_format, mins, secs)
-            }
+            is SleepTimer.At -> " · " + countdown(sleep.endsAtMs - SystemClock.elapsedRealtime())
+            is SleepTimer.Paused -> " · " + countdown(sleep.remainingMs) + " (paused)"
         }
         return base + sleepPart
+    }
+
+    private fun countdown(ms: Long): String {
+        val safe = ms.coerceAtLeast(0)
+        val mins = (safe / 60_000L).toInt()
+        val secs = ((safe % 60_000L) / 1000L).toInt()
+        return getString(R.string.player_sleep_countdown_format, mins, secs)
     }
 
     private fun formatRemaining(ms: Long): String {
