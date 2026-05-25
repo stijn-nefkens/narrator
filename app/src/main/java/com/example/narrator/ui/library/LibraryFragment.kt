@@ -95,9 +95,6 @@ class LibraryFragment : Fragment() {
 
         binding.librarySort.setOnClickListener(::showSortMenu)
 
-        binding.libraryContinueCard.setOnClickListener { openCurrentBook() }
-        binding.libraryContinuePlay.setOnClickListener { openCurrentBook(autoplay = true) }
-
         binding.libraryActionMode.setNavigationOnClickListener { exitSelectionMode() }
         binding.libraryActionMode.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -116,11 +113,8 @@ class LibraryFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                container.bookRepository.books.combine(container.narrator.state) { books, narrState ->
-                    books to narrState.loaded?.bookId
-                }.collect { (books, currentId) ->
+                container.bookRepository.books.collect { books ->
                     allBooks = books
-                    renderContinueCard(currentId, books)
                     applyFilterSort()
                 }
             }
@@ -155,22 +149,6 @@ class LibraryFragment : Fragment() {
             binding.libraryNoMatches.text = getString(R.string.library_no_matches, query.trim())
         }
         adapter.submitList(sorted)
-    }
-
-    private fun renderContinueCard(currentId: Long?, all: List<BookWithProgress>) {
-        val current = all.firstOrNull { it.book.id == currentId }
-        if (current == null) {
-            binding.libraryContinueCard.visibility = View.GONE
-            return
-        }
-        binding.libraryContinueCard.visibility = View.VISIBLE
-        binding.libraryContinueTitle.text = current.book.title
-        binding.libraryContinueAuthor.text = current.book.author
-        val bitmap = current.book.coverPath?.let {
-            runCatching { BitmapFactory.decodeFile(it) }.getOrNull()
-        }
-        if (bitmap != null) binding.libraryContinueCover.setImageBitmap(bitmap)
-        else binding.libraryContinueCover.setImageResource(R.drawable.ic_book_placeholder)
     }
 
     private fun showSortMenu(anchor: View) {
@@ -280,11 +258,6 @@ class LibraryFragment : Fragment() {
             }
             .setNegativeButton(R.string.library_cancel, null)
             .show()
-    }
-
-    private fun openCurrentBook(autoplay: Boolean = false) {
-        (activity as? MainActivity)?.showPlayerTab()
-        if (autoplay) container.narrator.togglePlayPause()
     }
 
     private fun enterSelectionMode() {

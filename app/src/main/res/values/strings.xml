@@ -171,10 +171,10 @@
     <string name="mini_player_subtitle">%1$s · Chapter %2$d of %3$d</string>
 
     <!-- Backup / restore -->
-    <string name="settings_backup">Back up library</string>
-    <string name="settings_backup_summary">Save your books, covers, bookmarks and progress to a ZIP file</string>
-    <string name="settings_restore">Restore library</string>
-    <string name="settings_restore_summary">Replace the current library with a previously saved ZIP</string>
+    <string name="settings_library_section">Library</string>
+    <string name="settings_library_section_summary">Back up your books, covers, bookmarks, and progress, or restore from a previous backup</string>
+    <string name="settings_backup">Back up</string>
+    <string name="settings_restore">Restore</string>
     <string name="backup_default_name">narrator-backup-%1$s.zip</string>
     <string name="backup_success">Backed up %1$d books</string>
     <string name="backup_failed">Backup failed: %1$s</string>

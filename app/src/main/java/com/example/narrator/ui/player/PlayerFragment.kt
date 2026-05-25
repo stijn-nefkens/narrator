@@ -61,7 +61,11 @@ class PlayerFragment : Fragment() {
             // independently of state changes.
             _binding?.let { b ->
                 val state = container.narrator.state.value
-                b.playerRemaining.text = formatRemainingWithSleep(state.sleepTimer)
+                // Don't trample over the "Synthesising…" message — let it stay visible
+                // until the chunk actually starts (render() will clear the flag then).
+                if (!showingSynthesising) {
+                    b.playerRemaining.text = formatRemainingWithSleep(state.sleepTimer)
+                }
             }
             if (container.narrator.state.value.isPlaying) {
                 highlightHandler.postDelayed(this, HIGHLIGHT_INTERVAL_MS)
@@ -70,10 +74,15 @@ class PlayerFragment : Fragment() {
     }
 
     private val synthesisingHandler = Handler(Looper.getMainLooper())
+    /** Tracks whether the status line is currently showing the "Synthesising…" message;
+     *  the highlight tick that refreshes player_remaining each second checks this so it
+     *  doesn't overwrite the message with the remaining-time string. */
+    private var showingSynthesising = false
     private val showSynthesisingRunnable = Runnable {
         val state = container.narrator.state.value
         if (state.isPlaying && state.currentChunkStartedAt == 0L) {
-            _binding?.playerSynthesising?.visibility = View.VISIBLE
+            showingSynthesising = true
+            _binding?.playerRemaining?.text = getString(R.string.player_synthesising)
         }
     }
 
@@ -202,11 +211,13 @@ class PlayerFragment : Fragment() {
         // Show "Synthesising…" only if we're playing but the current chunk hasn't started any
         // audio for SYNTHESISING_DELAY_MS. This suppresses the flicker at every chunk transition
         // while still explaining the wait when sherpa-onnx is genuinely slow on a long chunk.
+        // The message replaces the remaining-time text in-place to avoid reserving extra space.
         synthesisingHandler.removeCallbacks(showSynthesisingRunnable)
         if (state.isPlaying && state.currentChunkStartedAt == 0L) {
             synthesisingHandler.postDelayed(showSynthesisingRunnable, SYNTHESISING_DELAY_MS)
-        } else {
-            binding.playerSynthesising.visibility = View.INVISIBLE
+        } else if (showingSynthesising) {
+            showingSynthesising = false
+            binding.playerRemaining.text = formatRemainingWithSleep(state.sleepTimer)
         }
     }
 

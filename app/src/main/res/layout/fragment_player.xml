@@ -180,6 +180,9 @@
                     android:text="@string/player_bookmark_label" />
             </LinearLayout>
 
+            <!-- One-line status: either remaining time or "Synthesising…" while a chunk is
+                 still being prepared. Keeping it to a single TextView removes the always-
+                 reserved blank line the old separate playerSynthesising view occupied. -->
             <TextView
                 android:id="@+id/player_remaining"
                 android:layout_width="wrap_content"
@@ -189,22 +192,12 @@
                 android:textAppearance="?attr/textAppearanceCaption"
                 tools:text="About 4h 12m remaining" />
 
-            <TextView
-                android:id="@+id/player_synthesising"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/player_synthesising"
-                android:textAppearance="?attr/textAppearanceCaption"
-                android:visibility="invisible"
-                tools:visibility="visible" />
-
             <!-- Follow-along text: stays at the bottom so the controls above don't reflow. -->
             <TextView
                 android:id="@+id/player_current_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="12dp"
                 android:gravity="center"
                 android:textAppearance="?attr/textAppearanceBody1"
                 tools:text="Alice was beginning to get very tired of sitting by her sister." />

@@ -1,0 +1,13 @@
+Tightening pass.
+
+- Settings: "Back up library" and "Restore library" merged into a
+  single "Library" row with two side-by-side buttons.
+- Library: removed the Continue card. The mini-player above the
+  bottom nav already provides the same shortcut and the card was
+  taking up valuable list space.
+- Player: removed the always-reserved blank line for the
+  "Synthesising…" message. The message now replaces the remaining-
+  time line in place, so there's no empty gap between the controls
+  and the follow-along text. Also trimmed the top margin of the
+  follow-along text. The Player no longer needs to scroll on a
+  standard phone screen.
