@@ -139,6 +139,27 @@ class BookRepository(
         refresh()
     }
 
+    suspend fun setFinished(bookId: Long, finished: Boolean) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put(NarratorDatabase.COL_IS_FINISHED, if (finished) 1 else 0)
+        }
+        writeDb().update(
+            NarratorDatabase.TABLE_BOOKS, values,
+            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
+        )
+        refresh()
+    }
+
+    /** Drops the resume bookmark for a book so it starts from the beginning next load.
+     *  Named bookmarks (saved_bookmarks) are kept — the user might still want them. */
+    suspend fun resetProgress(bookId: Long) = withContext(Dispatchers.IO) {
+        writeDb().delete(
+            NarratorDatabase.TABLE_BOOKMARKS,
+            "${NarratorDatabase.COL_BOOK_ID} = ?", arrayOf(bookId.toString()),
+        )
+        refresh()
+    }
+
     /** Updates the per-book skip-pattern regex list. Newline-separated; empty string
      *  disables skip-pattern filtering for the book. */
     suspend fun updateSkipPatterns(bookId: Long, patterns: String) = withContext(Dispatchers.IO) {
@@ -289,6 +310,7 @@ class BookRepository(
         pageRangeStart = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_PAGE_RANGE_START)),
         pageRangeEnd = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_PAGE_RANGE_END)),
         skipPatterns = getString(getColumnIndexOrThrow(NarratorDatabase.COL_SKIP_PATTERNS)),
+        isFinished = getInt(getColumnIndexOrThrow(NarratorDatabase.COL_IS_FINISHED)) != 0,
     )
 
     private fun Cursor.toBookmark(): Bookmark = Bookmark(

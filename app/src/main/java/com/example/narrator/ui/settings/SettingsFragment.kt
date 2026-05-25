@@ -1,5 +1,6 @@
 package com.example.narrator.ui.settings
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -19,6 +20,7 @@ import com.example.narrator.data.ThemeMode
 import com.example.narrator.databinding.FragmentSettingsBinding
 import com.example.narrator.ui.about.AboutActivity
 import com.example.narrator.ui.voicesetup.VoiceSetupActivity
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,8 +61,11 @@ class SettingsFragment : Fragment() {
             startActivity(VoiceSetupActivity.intent(requireContext(), firstRun = false))
         }
         binding.settingsBackupRow.setOnClickListener {
-            val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            createBackup.launch(getString(R.string.backup_default_name, date))
+            // Include hour-minute so multiple backups on the same day don't collide on
+            // the suggested filename. Underscore between date and time keeps the segment
+            // sortable lexicographically.
+            val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date())
+            createBackup.launch(getString(R.string.backup_default_name, stamp))
         }
         binding.settingsRestoreRow.setOnClickListener {
             openBackup.launch(arrayOf("application/zip", "application/octet-stream"))
@@ -74,11 +79,19 @@ class SettingsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { container.backupManager.backupTo(uri) }
                 .onSuccess { s ->
-                    Toast.makeText(
-                        requireContext(),
+                    val root = view ?: return@onSuccess
+                    Snackbar.make(
+                        root,
                         getString(R.string.backup_success, s.bookFiles),
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                        Snackbar.LENGTH_LONG,
+                    ).setAction(R.string.backup_share) {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/zip"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching { startActivity(Intent.createChooser(send, null)) }
+                    }.show()
                 }
                 .onFailure { e ->
                     Toast.makeText(

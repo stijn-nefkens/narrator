@@ -156,6 +156,8 @@ class PlayerFragment : Fragment() {
         binding.playerEmpty.visibility = View.GONE
         binding.playerLoaded.visibility = View.VISIBLE
 
+        maybeShowSpeedTooltip()
+
         binding.playerTitle.text = loaded.title
         binding.playerAuthor.text = loaded.author
 
@@ -458,6 +460,17 @@ class PlayerFragment : Fragment() {
         }
     }
 
+    /** One-shot Snackbar that explains the speed-chip gestures the first time the user
+     *  reaches the Player with a book loaded. Pref flag keeps it from re-firing. */
+    private fun maybeShowSpeedTooltip() {
+        val prefs = container.preferences
+        if (prefs.speedTooltipShown) return
+        prefs.speedTooltipShown = true
+        Snackbar.make(binding.root, R.string.player_speed_tooltip, Snackbar.LENGTH_INDEFINITE)
+            .setAction(R.string.player_speed_tooltip_ok) { /* dismiss */ }
+            .show()
+    }
+
     private fun startExportBookmarks() {
         val title = container.narrator.state.value.loaded?.title?.take(40) ?: "narrator"
         val safe = title.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifEmpty { "narrator" }
@@ -516,15 +529,52 @@ class PlayerFragment : Fragment() {
         val labels = loaded.chapterTitles.mapIndexed { i, title ->
             "${i + 1}. $title"
         }.toTypedArray()
-        AlertDialog.Builder(requireContext())
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.player_chapter_dialog_title)
-            .setSingleChoiceItems(labels, state.position.chapterIndex) { dialog, which ->
+            .setSingleChoiceItems(labels, state.position.chapterIndex) { d, which ->
                 val start = loaded.chapterChunkCounts.take(which).sum()
                 container.narrator.seekToGlobalChunk(start)
-                dialog.dismiss()
+                d.dismiss()
             }
             .setNegativeButton(R.string.bookmarks_close, null)
-            .show()
+            .create()
+        dialog.show()
+        // Long-press a chapter row to bookmark the chapter's start position instead of
+        // jumping to it. Matches the existing long-press-to-delete pattern in the
+        // bookmarks dialog.
+        dialog.listView?.setOnItemLongClickListener { _, _, which, _ ->
+            val start = loaded.chapterChunkCounts.take(which).sum()
+            val (chapter, chunk) = chapterAndLocalChunkFor(loaded, start)
+            viewLifecycleOwner.lifecycleScope.launch {
+                container.bookRepository.addBookmark(
+                    bookId = loaded.bookId,
+                    chapterIndex = chapter,
+                    chunkIndex = chunk,
+                    globalChunk = start,
+                    label = null,
+                )
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.chapter_bookmarked, which + 1),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            true
+        }
+    }
+
+    /** Resolve (chapterIndex, localChunkIndex) for a global chunk position. Used by
+     *  long-press-to-bookmark in the chapter navigator. */
+    private fun chapterAndLocalChunkFor(
+        loaded: com.example.narrator.tts.LoadedBook,
+        globalChunk: Int,
+    ): Pair<Int, Int> {
+        var remaining = globalChunk
+        for ((i, count) in loaded.chapterChunkCounts.withIndex()) {
+            if (remaining < count) return i to remaining
+            remaining -= count
+        }
+        return (loaded.chapterChunkCounts.size - 1).coerceAtLeast(0) to 0
     }
 
     private fun openSleepDialog() {

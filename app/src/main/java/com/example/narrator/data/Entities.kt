@@ -15,6 +15,9 @@ data class BookEntity(
     val pageRangeEnd: Int = 0,
     /** Newline-separated regex patterns; chunks matching any pattern are dropped at load. */
     val skipPatterns: String = "",
+    /** User-marked "finished" flag — purely cosmetic; the library shows a badge but doesn't
+     *  hide the book unless the user explicitly filters. */
+    val isFinished: Boolean = false,
 )
 
 data class SavedBookmark(

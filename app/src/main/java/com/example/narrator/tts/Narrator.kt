@@ -85,6 +85,7 @@ class Narrator(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
     private var pausedByFocusLoss: Boolean = false
+    private var duckedByFocusLoss: Boolean = false
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS -> {
@@ -92,15 +93,25 @@ class Narrator(
                 pausedByFocusLoss = false
                 if (_state.value.isPlaying) pause()
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Brief interruption (alarm, notification). Pause and resume when focus returns.
+                // Quiet, brief interruption (notification chime). Ducking is more polite
+                // than pausing — the listener barely notices the dip.
+                duckedByFocusLoss = true
+                pipeline?.setVolume(DUCK_VOLUME)
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Loud, longer interruption (alarm, incoming Maps direction). Pause and
+                // resume when focus returns.
                 if (_state.value.isPlaying) {
                     pausedByFocusLoss = true
                     pause()
                 }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
+                if (duckedByFocusLoss) {
+                    duckedByFocusLoss = false
+                    pipeline?.setVolume(1f)
+                }
                 if (pausedByFocusLoss) {
                     pausedByFocusLoss = false
                     play()
@@ -247,6 +258,7 @@ class Narrator(
     fun setSleepTimer(option: SleepTimer) {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
+        pipeline?.setVolume(1f)  // cancel any in-progress fade-out
         // If the narrator isn't playing yet, start in Paused so the countdown doesn't run
         // before the user actually presses play.
         val effective = if (option is SleepTimer.At && !_state.value.isPlaying) {
@@ -258,10 +270,23 @@ class Narrator(
     }
 
     private fun startSleepCountdown(at: SleepTimer.At) {
-        val delayMs = (at.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        val totalRemaining = (at.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         sleepTimerJob = scope.launch {
-            kotlinx.coroutines.delay(delayMs)
+            val fadeDuration = SLEEP_FADE_MS
+            val waitBeforeFade = (totalRemaining - fadeDuration).coerceAtLeast(0L)
+            if (waitBeforeFade > 0) kotlinx.coroutines.delay(waitBeforeFade)
+            // Final fade window: ramp volume down so the cut doesn't land in the middle of
+            // a word. Steps are coarse (200ms) — finer than that doesn't matter perceptually
+            // and burns CPU on a phone meant to be at rest.
+            val stepMs = 200L
+            val steps = (fadeDuration / stepMs).toInt().coerceAtLeast(1)
+            for (i in 0 until steps) {
+                val v = 1f - (i + 1).toFloat() / steps
+                pipeline?.setVolume(v.coerceAtLeast(0f))
+                kotlinx.coroutines.delay(stepMs)
+            }
             pause()
+            pipeline?.setVolume(1f)
             _state.value = _state.value.copy(sleepTimer = SleepTimer.Off)
         }
     }
@@ -272,6 +297,9 @@ class Narrator(
         if (s is SleepTimer.At) {
             sleepTimerJob?.cancel()
             sleepTimerJob = null
+            // Restore volume in case we were mid-fade — otherwise resume picks back up
+            // at a near-zero volume and silently "plays".
+            pipeline?.setVolume(1f)
             val remaining = (s.endsAtMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
             _state.value = _state.value.copy(sleepTimer = SleepTimer.Paused(remaining))
         }
@@ -432,7 +460,7 @@ class Narrator(
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(attrs)
             .setOnAudioFocusChangeListener(focusListener)
-            .setWillPauseWhenDucked(true)  // we pause for any loss, don't try to duck
+            .setWillPauseWhenDucked(false)  // we handle ducking ourselves via setVolume
             .build()
         val result = audioManager.requestAudioFocus(req)
         return if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
@@ -542,6 +570,10 @@ class Narrator(
 
     private companion object {
         const val PREFETCH_DEPTH = 2
+        /** Length of the gentle volume ramp at the end of a sleep timer. */
+        const val SLEEP_FADE_MS = 15_000L
+        /** Volume MediaPlayer is set to while another app is ducking us (notification etc.). */
+        const val DUCK_VOLUME = 0.3f
     }
 
     private fun chunkTextAt(p: Position): String? =

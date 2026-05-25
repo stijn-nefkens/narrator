@@ -60,6 +60,7 @@ internal class FilePipeline(
     private val queue: ArrayDeque<PendingChunk> = ArrayDeque()
     private var paused = false
     private var speed: Float = 1.0f
+    private var volume: Float = 1.0f
     /** Chapter of the most recently completed chunk; used to insert a pause at chapter boundaries. */
     private var lastCompletedChapter: Int = -1
     private var pendingChapterStart: Runnable? = null
@@ -164,6 +165,15 @@ internal class FilePipeline(
         speed = value.coerceIn(0.5f, 2.5f)
         if (mpState == MpState.PLAYING) {
             runCatching { applySpeed() }
+        }
+    }
+
+    /** Stereo volume in [0, 1]. Used for sleep-timer fade-out and audio-focus ducking. */
+    fun setVolume(value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        volume = v
+        if (mpState == MpState.PLAYING || mpState == MpState.PAUSED) {
+            runCatching { mp.setVolume(v, v) }
         }
     }
 
@@ -296,6 +306,7 @@ internal class FilePipeline(
     private fun startReadyMp() {
         runCatching { mp.start() }
         applySpeed()
+        runCatching { mp.setVolume(volume, volume) }
         mpState = MpState.PLAYING
         activeChunk?.let {
             it.playStartAt = android.os.SystemClock.elapsedRealtime()

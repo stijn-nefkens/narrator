@@ -1,0 +1,31 @@
+QoL pass: 10 small improvements.
+
+Library
+- Mark a book as finished (toggle in Edit details). Finished books get a
+  small "FINISHED" chip and are slightly dimmed so the eye gravitates
+  to in-progress ones.
+- Reset progress button in Edit details: confirms, then puts the book
+  back at chapter 1. Named bookmarks are kept.
+- Empty library now shows a prominent "Import a book" button below the
+  hint text — not just a wall of words for first-time use.
+- Long-press a second book while in selection mode to extend the
+  selection between the two rows (shift-click style).
+
+Player
+- First-time tooltip explains the speed-chip gestures (tap to reset,
+  drag to step, long-press for slider). One-shot, never shows again.
+- Sleep timer fades out the audio over the last 15 seconds instead of
+  cutting mid-sentence.
+- Long-press a chapter in the chapter navigator to bookmark its
+  starting position instead of jumping to it.
+
+Audio
+- Quiet, brief interruptions (notification chimes) now duck the
+  narrator's volume to ~30% and restore it instead of pausing. Phone
+  calls and longer interruptions still pause cleanly.
+
+Settings
+- After backup, a Snackbar appears with a Share action to send the ZIP
+  to another app (cloud, email, etc.) in one tap.
+- Backup filename now includes hour-minute so multiple same-day
+  backups don't collide.

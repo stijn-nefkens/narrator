@@ -74,7 +74,7 @@ class LibraryFragment : Fragment() {
         binding.libraryList.adapter = adapter
         attachSwipeToDelete()
 
-        binding.libraryFab.setOnClickListener {
+        val pickFile = View.OnClickListener {
             openDocument.launch(
                 arrayOf(
                     "application/epub+zip",
@@ -83,6 +83,8 @@ class LibraryFragment : Fragment() {
                 )
             )
         }
+        binding.libraryFab.setOnClickListener(pickFile)
+        binding.libraryEmptyImport.setOnClickListener(pickFile)
 
         binding.librarySearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -184,12 +186,29 @@ class LibraryFragment : Fragment() {
         }
     }
 
+    /** Last row long-pressed (or the seed of the current selection). Used as the anchor
+     *  for the shift-select-style range extension on a second long-press. */
+    private var lastLongPressedId: Long? = null
+
     private fun onBookLongClicked(item: BookWithProgress) {
-        // Always: enter selection mode and tick this row. No intermediate menu.
-        // (Edit moved to the pen icon in the action mode toolbar; Delete is via swipe
-        // for a single book or via the action-mode trash for many.)
-        if (!adapter.selectionEnabled) enterSelectionMode()
-        adapter.toggleSelected(item)
+        if (!adapter.selectionEnabled) {
+            // Entering selection mode: just tick this row and remember it as the anchor.
+            enterSelectionMode()
+            adapter.toggleSelected(item)
+            lastLongPressedId = item.book.id
+            updateActionModeTitle()
+            return
+        }
+        // Already in selection mode: long-press extends the selection from the previous
+        // anchor to this row (shift-click semantics). Anchor advances so a second extension
+        // works the way the user expects.
+        val anchor = lastLongPressedId
+        if (anchor != null && anchor != item.book.id) {
+            adapter.selectRange(anchor, item.book.id)
+        } else {
+            adapter.toggleSelected(item)
+        }
+        lastLongPressedId = item.book.id
         updateActionModeTitle()
     }
 
@@ -208,6 +227,33 @@ class LibraryFragment : Fragment() {
         }
         val authorInput = android.widget.EditText(ctx).apply {
             setText(item.book.author); hint = getString(R.string.library_rename_author_hint)
+        }
+        // "Mark as finished" toggle. MaterialSwitch needs a parent row with a label.
+        val finishedSwitch = com.google.android.material.materialswitch.MaterialSwitch(ctx).apply {
+            isChecked = item.book.isFinished
+            text = getString(R.string.library_mark_finished)
+            textOn = ""
+            textOff = ""
+        }
+        val resetButton = com.google.android.material.button.MaterialButton(
+            ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle,
+        ).apply {
+            text = getString(R.string.library_reset_progress)
+            setOnClickListener {
+                AlertDialog.Builder(ctx)
+                    .setTitle(R.string.library_reset_progress_title)
+                    .setMessage(getString(R.string.library_reset_progress_message, item.book.title))
+                    .setPositiveButton(R.string.library_reset_progress) { _, _ ->
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            container.bookRepository.resetProgress(item.book.id)
+                            if (container.narrator.state.value.loaded?.bookId == item.book.id) {
+                                container.narrator.loadBook(item.book.id)
+                            }
+                        }
+                    }
+                    .setNegativeButton(R.string.library_cancel, null)
+                    .show()
+            }
         }
         val skipLabel = android.widget.TextView(ctx).apply {
             text = getString(R.string.library_skip_patterns_label)
@@ -232,6 +278,14 @@ class LibraryFragment : Fragment() {
             setPadding(pad, pad / 2, pad, 0)
             addView(titleInput)
             addView(authorInput)
+            addView(finishedSwitch, android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = pad / 2 })
+            addView(resetButton, android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = pad / 4 })
             addView(skipLabel)
             addView(skipHelp)
             addView(skipInput)
@@ -244,8 +298,12 @@ class LibraryFragment : Fragment() {
                 val newTitle = titleInput.text.toString().trim().ifBlank { item.book.title }
                 val newAuthor = authorInput.text.toString().trim().ifBlank { item.book.author }
                 val newSkip = skipInput.text.toString().trim()
+                val newFinished = finishedSwitch.isChecked
                 viewLifecycleOwner.lifecycleScope.launch {
                     container.bookRepository.updateBookDetails(item.book.id, newTitle, newAuthor)
+                    if (newFinished != item.book.isFinished) {
+                        container.bookRepository.setFinished(item.book.id, newFinished)
+                    }
                     if (newSkip != item.book.skipPatterns) {
                         container.bookRepository.updateSkipPatterns(item.book.id, newSkip)
                         // Re-parse next time the book is loaded by tapping; if it's the
@@ -272,6 +330,7 @@ class LibraryFragment : Fragment() {
         adapter.setSelectionMode(false)
         binding.libraryActionMode.visibility = View.GONE
         backCallback.isEnabled = false
+        lastLongPressedId = null
     }
 
     private fun updateActionModeTitle() {

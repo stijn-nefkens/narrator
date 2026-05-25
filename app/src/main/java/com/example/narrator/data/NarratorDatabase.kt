@@ -36,11 +36,18 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
                 "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_SKIP_PATTERNS TEXT NOT NULL DEFAULT ''"
             )
         }
+        if (oldVersion < 4) {
+            // "Mark as finished" toggle so completed books can be visually distinguished
+            // (and eventually filtered) without losing their entry in the library.
+            db.execSQL(
+                "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_IS_FINISHED INTEGER NOT NULL DEFAULT 0"
+            )
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "narrator.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         const val TABLE_BOOKS = "books"
         const val COL_ID = "id"
@@ -56,6 +63,8 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_PAGE_RANGE_END = "page_range_end"
         /** Newline-separated regex patterns; chunks matching any are dropped post-parse. */
         const val COL_SKIP_PATTERNS = "skip_patterns"
+        /** 1 if the user manually marked the book as finished. */
+        const val COL_IS_FINISHED = "is_finished"
 
         /** Single resume position per book (the "where I left off" bookmark). */
         const val TABLE_BOOKMARKS = "bookmarks"
@@ -83,7 +92,8 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
               $COL_PLAYBACK_SPEED REAL NOT NULL DEFAULT 1.0,
               $COL_PAGE_RANGE_START INTEGER NOT NULL DEFAULT 0,
               $COL_PAGE_RANGE_END INTEGER NOT NULL DEFAULT 0,
-              $COL_SKIP_PATTERNS TEXT NOT NULL DEFAULT ''
+              $COL_SKIP_PATTERNS TEXT NOT NULL DEFAULT '',
+              $COL_IS_FINISHED INTEGER NOT NULL DEFAULT 0
             )
         """
 

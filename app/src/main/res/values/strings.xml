@@ -168,6 +168,16 @@
     <string name="library_select_all">Select all</string>
     <string name="library_deleted_one">Deleted "%1$s"</string>
     <string name="library_undo">Undo</string>
+    <string name="library_finished_chip">Finished</string>
+    <string name="library_mark_finished">Mark as finished</string>
+    <string name="library_reset_progress">Reset progress</string>
+    <string name="library_reset_progress_title">Reset progress?</string>
+    <string name="library_reset_progress_message">Move "%1$s" back to chapter 1. Named bookmarks are kept.</string>
+    <string name="library_import_cta">Import a book</string>
+    <string name="player_speed_tooltip">Tip: tap the speed chip to reset, drag left or right to step by 0.1×, long-press for a slider.</string>
+    <string name="player_speed_tooltip_ok">Got it</string>
+    <string name="chapter_bookmarked">Bookmarked Chapter %1$d</string>
+    <string name="backup_share">Share</string>
     <string name="mini_player_subtitle">%1$s · Chapter %2$d of %3$d</string>
 
     <!-- Backup / restore -->

@@ -51,6 +51,11 @@ class AppPreferences(context: Context) {
         )
         set(value) = prefs.edit().putString(KEY_LIB_SORT, value.name).apply()
 
+    /** Whether we've already shown the "drag/long-press the speed chip" hint. One-shot. */
+    var speedTooltipShown: Boolean
+        get() = prefs.getBoolean(KEY_SPEED_TOOLTIP, false)
+        set(value) = prefs.edit().putBoolean(KEY_SPEED_TOOLTIP, value).apply()
+
     fun applyTheme() {
         AppCompatDelegate.setDefaultNightMode(theme.nightModeFlag())
     }
@@ -64,5 +69,6 @@ class AppPreferences(context: Context) {
         private const val KEY_CONTINUE = "continue_through_chapters"
         private const val KEY_LAST_BOOK = "last_opened_book_id"
         private const val KEY_LIB_SORT = "library_sort_order"
+        private const val KEY_SPEED_TOOLTIP = "speed_tooltip_shown"
     }
 }

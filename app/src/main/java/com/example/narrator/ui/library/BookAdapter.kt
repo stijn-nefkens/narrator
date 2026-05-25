@@ -75,10 +75,15 @@ class BookAdapter(
             val ext = java.io.File(item.book.epubPath).extension.uppercase()
             binding.itemFormat.text = ext.ifBlank { "EPUB" }
 
+            // Finished chip — shown only when the user has flagged the book as done.
+            binding.itemFinished.visibility =
+                if (item.book.isFinished) android.view.View.VISIBLE else android.view.View.GONE
+
             // Selection state — the row background drawable responds to isActivated.
             val isSelected = selectedIds.contains(item.book.id)
             binding.root.isActivated = isSelected
-            binding.root.alpha = 1f  // never dim; the background tint is the affordance
+            // Finished books get a slight fade so the eye gravitates to in-progress ones.
+            binding.root.alpha = if (item.book.isFinished && !isSelected) 0.6f else 1f
 
             binding.root.setOnClickListener { onClick(item) }
             binding.root.setOnLongClickListener { onLongClick(item); true }
@@ -91,6 +96,21 @@ class BookAdapter(
         selectedIds.clear()
         selectedIds.addAll(currentList.map { it.book.id })
         notifyItemRangeChanged(0, itemCount)
+    }
+
+    /** Selects every row between `fromId` (the previous selection anchor) and `toId` —
+     *  both endpoints inclusive — without clearing anything already selected. Used by
+     *  the long-press-to-extend gesture. */
+    fun selectRange(fromId: Long, toId: Long) {
+        val fromPos = positionOf(fromId)
+        val toPos = positionOf(toId)
+        if (fromPos < 0 || toPos < 0) return
+        val lo = minOf(fromPos, toPos)
+        val hi = maxOf(fromPos, toPos)
+        for (i in lo..hi) {
+            selectedIds.add(currentList[i].book.id)
+        }
+        notifyItemRangeChanged(lo, hi - lo + 1)
     }
 
     private fun formatLastOpened(ctx: android.content.Context, updatedAtMs: Long?): String {

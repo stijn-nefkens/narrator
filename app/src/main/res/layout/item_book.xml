@@ -68,6 +68,23 @@
                 tools:text="34%" />
 
             <TextView
+                android:id="@+id/item_finished"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:textSize="10sp"
+                android:textAllCaps="true"
+                android:includeFontPadding="false"
+                android:gravity="center"
+                android:text="@string/library_finished_chip"
+                android:textColor="?attr/colorOnPrimaryContainer"
+                android:background="@drawable/library_finished_chip_bg"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <TextView
                 android:id="@+id/item_format"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
