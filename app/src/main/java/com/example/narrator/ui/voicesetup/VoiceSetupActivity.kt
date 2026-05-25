@@ -3,6 +3,7 @@ package com.example.narrator.ui.voicesetup
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.view.View
@@ -36,22 +37,30 @@ class VoiceSetupActivity : AppCompatActivity() {
             finish()
         }
         binding.voiceSetupDone.setOnClickListener { finish() }
-        binding.voiceSetupGetMore.setOnClickListener { showInstallChoices() }
+        binding.voiceSetupGetMore.setOnClickListener { promptInstallKokoro() }
 
         renderEngines()
     }
 
-    private fun showInstallChoices() {
+    private fun promptInstallKokoro() {
         AlertDialog.Builder(this)
-            .setTitle(R.string.voice_setup_get_more_title)
-            .setMessage(R.string.voice_setup_get_more_message)
-            .setPositiveButton(R.string.voice_setup_get_sherpa) { _, _ -> openUrl(URL_SHERPA) }
-            .setNeutralButton(R.string.voice_setup_get_rhvoice) { _, _ -> openUrl(URL_RHVOICE) }
+            .setTitle(R.string.voice_setup_install_title)
+            .setMessage(R.string.voice_setup_install_message)
+            .setPositiveButton(R.string.voice_setup_install_download) { _, _ -> startKokoroDownload() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
-    private fun openUrl(url: String) {
+    private fun startKokoroDownload() {
+        val abis = Build.SUPPORTED_ABIS.orEmpty()
+        val url = if (abis.contains("arm64-v8a")) {
+            KOKORO_APK_ARM64
+        } else {
+            // No non-arm64 build exists for Kokoro; send them to the docs page so they can see
+            // what their device supports.
+            Toast.makeText(this, R.string.voice_setup_install_unsupported, Toast.LENGTH_LONG).show()
+            KOKORO_FALLBACK_PAGE
+        }
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
@@ -164,8 +173,16 @@ class VoiceSetupActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FIRST_RUN = "first_run"
-        private const val URL_SHERPA = "https://f-droid.org/packages/com.k2fsa.sherpa.onnx.tts.engine/"
-        private const val URL_RHVOICE = "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/"
+
+        // Direct APK from the official k2-fsa HuggingFace mirror. sherpa-onnx isn't on the Play
+        // Store or F-Droid, and the user pointed at this specific build on apk-engine.html, so we
+        // bypass any redirector and start the download in the system browser. The user gets the
+        // standard Android "install from unknown source" prompt — one tap on the URL, one tap to
+        // open with the package installer, done.
+        private const val KOKORO_APK_ARM64 =
+            "https://huggingface.co/csukuangfj2/sherpa-onnx-apk/resolve/main/tts-engine-new/1.13.1/sherpa-onnx-1.13.1-arm64-v8a-en-tts-engine-kokoro-en-v0_19.apk"
+        private const val KOKORO_FALLBACK_PAGE =
+            "https://k2-fsa.github.io/sherpa/onnx/tts/apk-engine.html"
 
         fun intent(context: Context, firstRun: Boolean): Intent =
             Intent(context, VoiceSetupActivity::class.java).putExtra(EXTRA_FIRST_RUN, firstRun)

@@ -1,0 +1,13 @@
+Easier path to a natural-sounding voice.
+
+Settings
+- Voice setup moved to the top — it's the single biggest quality upgrade,
+  so it shouldn't be at the bottom of the screen.
+
+Voice setup
+- "Get a better voice" replaced with "Install natural voice (Kokoro)" that
+  downloads the sherpa-onnx Kokoro engine APK directly from the official
+  k2-fsa mirror. One tap, the browser handles the download, Android prompts
+  to install. No more app-store hunt.
+- Dropped the RHVoice suggestion to keep the nudge unambiguous: Kokoro is
+  the recommended path.

@@ -10,6 +10,36 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Voice setup — pinned to the top because picking a natural voice is the single
+             biggest quality improvement a new user can make. -->
+        <LinearLayout
+            android:id="@+id/settings_voice_setup_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackground">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_voice_setup"
+                android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/settings_voice_setup_summary"
+                android:textAppearance="?attr/textAppearanceBody2" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="4dp"
+            android:background="?android:attr/listDivider" />
+
         <!-- Default speed -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -209,34 +239,6 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginVertical="4dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Voice setup -->
-        <LinearLayout
-            android:id="@+id/settings_voice_setup_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="8dp"
-            android:background="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_voice_setup"
-                android:textAppearance="?attr/textAppearanceSubtitle1" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/settings_voice_setup_summary"
-                android:textAppearance="?attr/textAppearanceBody2" />
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
             android:background="?android:attr/listDivider" />
 
         <LinearLayout
