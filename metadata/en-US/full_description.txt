@@ -1,21 +1,44 @@
-Narrator is an audiobook player for EPUB files. Designed for /e/OS and de-Googled
-Android devices, but works on any Android 8.0+ phone.
+Narrator is an audiobook player for EPUB and PDF files. Designed for /e/OS and
+de-Googled Android devices, but works on any Android 8.0+ phone.
 
 Features
 
-- Import EPUB files via the system file picker; the parser strips page numbers and
-  other non-narratable artefacts, then splits the text into clause-aware chunks.
-- Plays through the on-device TextToSpeech engine of your choice. Sherpa-onnx /
-  Kokoro is recommended for natural neural narration; RHVoice is a lighter fallback.
-- Background playback with lock-screen / notification controls.
-- Per-book bookmarks, resume position, playback speed memory.
-- Sleep timer (end-of-chapter, 15/30/60 minutes).
+- Import EPUB and PDF files via the system file picker, share menu, or by
+  tapping them in any file manager.
+- Plays through the on-device TextToSpeech engine of your choice. Sherpa-onnx
+  with Kokoro is recommended for natural neural narration; a one-tap "Install
+  natural voice" button downloads it directly from the official mirror.
+- Background playback with lock-screen and notification controls. Auto-pauses
+  on phone calls and other audio focus loss.
+- Mini-player above the bottom nav so you can pause / skip from any tab.
+- Speed control: tap to reset to 1.0x, drag to adjust in 0.1x steps, long-press
+  for a slider. Per-book speed memory plus a global default.
+- Per-book bookmarks (with plain-text export), resume position, sleep timer
+  (end-of-chapter, 15/30/60 minutes, or custom).
+- Scrub bar with chapter-boundary dots.
 - Follow-along text with word-by-word highlighting.
+- Library: search, four sort modes, multi-select, swipe-to-delete with undo,
+  per-book rename and skip-patterns editor.
+- Backup the whole library (DB + books + covers) to a single ZIP, restore on
+  another device.
+- Themes: light, dark, follow system, true-black AMOLED.
+
+PDF cleanup
+
+The PDF parser drops front-matter (copyright, TOC), back-matter (references,
+index, glossary), running headers/footers, page numbers, image captions, and
+table regions. It rejoins hyphenated line breaks, normalises ligatures and
+soft hyphens, expands common abbreviations, converts Roman numerals in
+chapter headings, and replaces URLs with spoken placeholders. For PDFs where
+the heuristics fall short, you can pick a page range at import time, preview
+the parsed chapters before committing, and add per-book regex skip patterns.
 
 Privacy
 
-Everything runs on the device. No network access, no analytics, no tracking, no
-cloud sync. Your books, bookmarks, and progress never leave the phone.
+Everything runs on the device. No network access, no analytics, no tracking,
+no cloud sync. Your books, bookmarks, and progress never leave the phone.
+The one exception is the "Install natural voice" button — it opens the Kokoro
+APK download URL in your browser, but only when you explicitly tap it.
 
 Source: https://github.com/stijn-nefkens/narrator
 License: Apache 2.0

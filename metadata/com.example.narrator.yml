@@ -8,8 +8,8 @@ IssueTracker: https://github.com/stijn-nefkens/narrator/issues
 
 AutoName: Narrator
 Description: |
-    Narrator is an audiobook player for EPUB files. Designed for /e/OS and de-Googled
-    Android devices, but works on any Android 8.0+ phone.
+    Narrator is an audiobook player for EPUB and PDF files. Designed for /e/OS and
+    de-Googled Android devices, but works on any Android 8.0+ phone.
 
     Everything runs on the device — no network access, no analytics, no tracking, no
     cloud sync. Books, bookmarks and progress never leave the phone.
