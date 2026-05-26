@@ -6,6 +6,12 @@ any Android 8.0+ device.
 Everything runs on the device. No network access, no analytics, no cloud sync.
 Your books, bookmarks, and progress never leave the phone.
 
+## Author's Note
+
+It had been more than a year since I started reading _The Life and Death of Democracy_, and I hadn't finished it yet. Having enjoyed the flexibility of audiobooks, I decided to buy the audiobook version instead. Unfortunately, I found that it did not exist. That's when I imagined it would be feasible to create an application that would read EPUBs to me. Despite my background in coding, I wasn't quite willing to sacrifice the time required to write my own app by hand. The idea was shelved—until recently, when, with the improvements to LLMs, it became clear it would be feasible to create a prototype over a weekend. I got to work.
+
+This app fills a niche for books that have not been released as audiobooks. While it cannot reproduce the spirit or vocal variation of a real human's voice, it can be used to find an audience for books that otherwise would have been left shelved. I personally use it for works of non-fiction, or shorter material only available in PDF.
+
 ## Features
 
 ### Content
