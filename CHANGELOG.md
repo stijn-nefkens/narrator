@@ -5,8 +5,12 @@ All notable changes per release. Newest at top. Format loosely follows
 
 ## 0.18.0 — 2026-05-31
 
-Progress-percentage accuracy, chapter-title separation, import-flow
-cleanup. Schema migrates v4 → v5.
+Two batches shipped together — the 0.17.0 work below was never tagged
+(its release attempts kept getting interrupted), so it ships here under
+one tag. `versionCode` 22 is intentionally skipped. Schema migrates
+v4 → v5.
+
+Progress, chapter titles, import flow (the 0.18.0 batch):
 
 - **Finished = 100%** (was stuck at 99%): the playhead only reaches the
   last sentence index (~99%), so a fully-read book never hit 100.
@@ -35,32 +39,20 @@ cleanup. Schema migrates v4 → v5.
 - **Separate bookmark export removed**: the library backup (Settings)
   already includes the saved-bookmarks table.
 
-## 0.17.0 — 2026-05-31
-
-Title-sync fix + the duplication it exposed, trailing-bracket audio fix,
-and a dynamic-chopping tune.
+Title sync, trailing-bracket audio, chopping tune (the 0.17.0 batch):
 
 - **Library title/author edits now reach the Player** (+ mini-player +
-  notification), live, without a re-parse or playback interruption. Root
-  cause was a duplicated source of truth: `LoadedBook.title/author` came
-  from the *parsed file*, while the Library showed the *DB* row, so edits
-  never matched. Merged onto the DB as the single authority — the parsed
-  `Book` is now content-only (chapters/chunks/cover), its embedded
-  title/author used solely at import. New pure `LoadedBook.from(book,
-  parsed, totalChunks)` factory (unit-tested) is the one seam that builds
-  the Player view-model; `Narrator.refreshLoadedMetadata(bookId)` updates
-  the loaded book in place on edit.
+  notification), live, without a re-parse. Root cause was a duplicated
+  source of truth: `LoadedBook.title/author` came from the *parsed file*
+  while the Library showed the *DB* row. Merged onto the DB via the new
+  pure `LoadedBook.from(...)` factory; `Narrator.refreshLoadedMetadata`
+  updates the loaded book in place on edit. Unit-tested.
 - **Trailing-bracket click fixed**: `)` `]` `}` added to
-  `FilePipeline.TRAILING_NOISE_CHARS`, so a sentence ending ".)" / ".]"
-  no longer renders the "ktsh" artifact (same class as the earlier
-  trailing-quote fix). Extracted `stripTrailingNoise` as a pure
-  `@VisibleForTesting` function with a test asserting every member is
-  stripped while the terminator survives.
+  `FilePipeline.TRAILING_NOISE_CHARS` so ".)" / ".]" no longer renders the
+  "ktsh" artifact. `stripTrailingNoise` extracted + unit-tested.
 - **Dynamic chopping tuned**: `budgetForDepth` depth 1 130/90 → 110/75,
-  depth 2 220/160 → 170/120 (cold start and whole-at-depth-3 unchanged).
-  Cuts a touch more at shallow buffer to bank audio faster — an occasional
-  stop-to-synthesise mid-playback is more jarring than a slightly-glued
-  sentence.
+  depth 2 220/160 → 170/120 (cold start and whole-at-depth-3 unchanged) —
+  banks audio a touch faster to avoid mid-playback stalls.
 
 ## 0.16.2 — 2026-05-31
 
