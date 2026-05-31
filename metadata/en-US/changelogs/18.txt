@@ -1,0 +1,5 @@
+A short pause after each chapter title.
+
+- When a new chapter begins, the chapter heading is now followed by
+  a brief natural pause before the chapter body starts, so the title
+  reads as its own line instead of running straight into the text.

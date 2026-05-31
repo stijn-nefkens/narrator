@@ -3,6 +3,27 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.15.0 — 2026-05-31
+
+Natural pause after a spoken chapter title.
+
+- The chapter heading is already read aloud (EPUB `<h1>` and PDF
+  large-font line both become a chapter's first chunk). A short beat
+  (`TITLE_PAUSE_MS` = 900ms) is now inserted after it so the title reads
+  as its own line instead of running into the body. `FilePipeline` holds
+  the MediaPlayer idle after a chunk flagged `isChapterTitle`; the
+  existing inter-chapter pause and this post-title pause share one
+  scheduled-start slot (`pendingDelayedStart`) and never overlap.
+- The title flag is set by `Narrator.isChapterTitlePosition`: chunk 0,
+  the chapter has a following body chunk, the chunk is short
+  (≤ `TITLE_MAX_CHARS`), and its text matches the chapter title
+  (`titleLike` — normalised compare with containment to absorb a
+  "Chapter N" prefix / punctuation divergence). The title-match guard
+  stops the pause firing after an ordinary short opening sentence.
+- `titleLike` is pure + `@VisibleForTesting`; `NarratorTitleTest` covers
+  exact / case / punctuation / containment matches plus non-title and
+  blank cases. Added a `TIMING pause` log line for diagnosing gaps.
+
 ## 0.14.0 — 2026-05-31
 
 PDF text-handling: body Roman numerals + stronger table detection.
