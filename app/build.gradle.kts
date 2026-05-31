@@ -30,8 +30,8 @@ android {
         applicationId = "com.example.narrator"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.16.2"
+        versionCode = 23
+        versionName = "0.18.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

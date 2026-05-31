@@ -128,7 +128,7 @@ object EpubParser {
         val noFragTitle = tocByFragment.firstOrNull { it.first == null }?.second
 
         if (fragmentsOnly.isEmpty()) {
-            val chunks = paragraphsToChunks(HtmlToText.extractParagraphs(xhtml), locale)
+            val chunks = paragraphsToChunks(HtmlToText.extractParagraphs(xhtml), locale, noFragTitle)
             if (chunks.isEmpty()) return emptyList()
             return listOf(RawChapter(noFragTitle, spineIndex, spineAbsPath, chunks))
         }
@@ -158,9 +158,10 @@ object EpubParser {
         var accumulator: Element = body.shallowClone()
 
         fun flushAccumulator() {
-            val chunks = paragraphsToChunks(HtmlToText.extractParagraphs(accumulator.outerHtml()), locale)
+            val title = currentTitle
+            val chunks = paragraphsToChunks(HtmlToText.extractParagraphs(accumulator.outerHtml()), locale, title)
             if (chunks.isNotEmpty()) {
-                result.add(RawChapter(currentTitle, spineIndex, spineAbsPath, chunks))
+                result.add(RawChapter(title, spineIndex, spineAbsPath, chunks))
             }
             accumulator = body.shallowClone()
         }
@@ -221,8 +222,22 @@ object EpubParser {
     // Playback sub-chunks long sentences on demand (buffer-adaptive), so the parser emits whole
     // sentence/utterance units rather than pre-cut chunks. splitSentences merges short dialogue
     // but leaves long sentences intact.
-    private fun paragraphsToChunks(paragraphs: List<String>, locale: Locale): List<String> =
-        paragraphs.flatMap { Sentences.splitSentences(it, locale) }
+    /** Splits each paragraph into sentence chunks. If [title] is known, the first paragraph has a
+     *  glued chapter heading split off (so "Chapter One It was..." becomes two chunks and the
+     *  title pause can fire). */
+    private fun paragraphsToChunks(
+        paragraphs: List<String>,
+        locale: Locale,
+        title: String? = null,
+    ): List<String> {
+        val adjusted = if (paragraphs.isNotEmpty() && !title.isNullOrBlank()) {
+            // Split a glued heading off the first paragraph into its own paragraph(s).
+            Sentences.splitHeadingFromBody(paragraphs[0], title) + paragraphs.drop(1)
+        } else {
+            paragraphs
+        }
+        return adjusted.flatMap { Sentences.splitSentences(it, locale) }
+    }
 
     private fun decode(s: String): String = try {
         URLDecoder.decode(s, "UTF-8")

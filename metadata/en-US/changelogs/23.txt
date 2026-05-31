@@ -1,0 +1,14 @@
+Progress accuracy, chapter titles, and import flow.
+
+- Finished books now show 100% (and are auto-marked finished when you
+  reach the end), instead of sticking at 99%.
+- Fixed wrong progress percentages on books imported before the 0.16
+  update — their resume positions are reset once so the percentage is
+  accurate again. (Affected books restart from the beginning.)
+- Chapter titles are no longer glued onto the first sentence; the title
+  is read on its own with a short pause before the chapter body.
+- A loading spinner now shows when you open a book and when you import
+  one, so a slow parse no longer looks like nothing happened.
+- Importing a book is now one tap — the preview step was removed.
+- Removed the separate "export bookmarks" button; bookmarks are already
+  included when you back up your library in Settings.

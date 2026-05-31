@@ -35,7 +35,33 @@ data class LoadedBook(
     val chapterTitles: List<String>,
     val chapterChunkCounts: List<Int>,
     val totalChunks: Int,
-)
+) {
+    companion object {
+        /**
+         * Builds a [LoadedBook] from the database row [book] and the parsed file [parsed].
+         *
+         * Title, author and cover come from the DATABASE — they're user-editable in the Library,
+         * so the DB is the single source of truth and edits flow straight to the Player. The
+         * parsed file is used only for *content* (chapter titles + per-chapter chunk lists); its
+         * embedded title/author are consumed once at import time (BookImporter writes them into
+         * the DB) and never read here. Keeping these split was the bug: the Player used to show
+         * the parsed (file) title while the Library showed the DB title, so edits never matched.
+         */
+        fun from(
+            book: com.example.narrator.data.BookEntity,
+            parsed: Book,
+            totalChunks: Int,
+        ): LoadedBook = LoadedBook(
+            bookId = book.id,
+            title = book.title,
+            author = book.author,
+            coverPath = book.coverPath,
+            chapterTitles = parsed.chapters.map { it.title },
+            chapterChunkCounts = parsed.chapters.map { it.chunks.size },
+            totalChunks = totalChunks,
+        )
+    }
+}
 
 data class NarratorState(
     val loaded: LoadedBook? = null,
@@ -249,15 +275,8 @@ class Narrator(
         val total = chunksByChapter.sumOf { it.size }
         if (total != book.totalChunks) repository.updateTotalChunks(bookId, total)
 
-        val loaded = LoadedBook(
-            bookId = bookId,
-            title = parsed.title,
-            author = parsed.author,
-            coverPath = book.coverPath,
-            chapterTitles = parsed.chapters.map { it.title },
-            chapterChunkCounts = parsed.chapters.map { it.chunks.size },
-            totalChunks = total,
-        )
+        // Title/author/cover come from the DB row (user-editable), content from the parsed file.
+        val loaded = LoadedBook.from(book, parsed, total)
         val pos = if (bookmark != null) {
             positionFor(loaded, bookmark.chapterIndex, bookmark.chunkIndex)
         } else {
@@ -282,6 +301,26 @@ class Narrator(
         // Start prefetching as soon as the book is loaded so the first chunk is already
         // synthesised by the time the user presses play.
         primeFromCurrent(autoplay = false)
+    }
+
+    /**
+     * Refresh the loaded book's editable metadata (title / author / cover) from the DB without
+     * re-parsing or interrupting playback. Call after the user edits these for the currently
+     * loaded book in the Library, so the Player, mini-player and notification update live. No-op
+     * if a different book (or none) is loaded.
+     */
+    suspend fun refreshLoadedMetadata(bookId: Long) {
+        if (_state.value.loaded?.bookId != bookId) return
+        val book = repository.getBook(bookId) ?: return
+        _state.value.loaded?.let { current ->
+            _state.value = _state.value.copy(
+                loaded = current.copy(
+                    title = book.title,
+                    author = book.author,
+                    coverPath = book.coverPath,
+                ),
+            )
+        }
     }
 
     private fun cacheSignature(book: BookEntity): String =
@@ -781,9 +820,12 @@ class Narrator(
         }
         val nextPos = advanceChunk(loaded, s.position, 1)
         if (nextPos == s.position) {
-            // End of book.
+            // End of book: stop and auto-mark finished so the library shows 100% (the playhead
+            // only ever reaches the last sentence index = ~99%, so without this a fully-read book
+            // sticks below 100). Mirrors the manual "mark as finished" toggle.
             _state.value = s.copy(isPlaying = false)
             persistBookmark()
+            scope.launch { repository.setFinished(loaded.bookId, true) }
             return
         }
         val crossedChapter = nextPos.chapterIndex != s.position.chapterIndex

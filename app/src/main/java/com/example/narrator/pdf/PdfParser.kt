@@ -263,12 +263,18 @@ object PdfParser {
             val withoutFootnotes = stripFootnotes(chapterLines)
             val withoutTables = stripTableRuns(withoutFootnotes)
             val cleaned = withoutTables.map { TextCleaner.clean(it.text) }
-            val paragraphs = linesToParagraphs(cleaned).filterNot { looksLikeImageCaption(it) }
-            // Emit whole sentence units; playback sub-chunks them adaptively by buffer depth.
+            val cleanTitle = TextCleaner.cleanTitle(title).ifBlank { "Chapter ${index + 1}" }
+            val rawParas = linesToParagraphs(cleaned).filterNot { looksLikeImageCaption(it) }
+            // Split a glued heading off the first paragraph into its own paragraph so it reads on
+            // its own and the chapter-title pause can fire. Emit whole sentence units; playback
+            // sub-chunks them adaptively by buffer depth.
+            val paragraphs = if (rawParas.isNotEmpty()) {
+                Sentences.splitHeadingFromBody(rawParas[0], cleanTitle) + rawParas.drop(1)
+            } else {
+                rawParas
+            }
             val chunks = paragraphs.flatMap { Sentences.splitSentences(it) }
             if (chunks.isNotEmpty()) {
-                val cleanTitle = TextCleaner.cleanTitle(title)
-                    .ifBlank { "Chapter ${index + 1}" }
                 chapters.add(Chapter(cleanTitle, chunks))
             }
         }

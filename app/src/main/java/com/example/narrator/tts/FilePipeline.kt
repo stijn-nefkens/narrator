@@ -258,10 +258,10 @@ internal class FilePipeline(
     private fun synthesise(chunk: PendingChunk) {
         val synthId = "synth_${UUID.randomUUID()}"
         chunk.synthId = synthId
-        // sherpa-onnx / Kokoro renders trailing quote characters as a small fricative "ktsh"
+        // sherpa-onnx / Kokoro renders trailing quotes / brackets as a small fricative "ktsh"
         // artifact after the last word. Strip them — the period or other terminator before the
-        // quote still carries the correct sentence intonation.
-        val text = chunk.text.trimEnd(*TRAILING_NOISE_CHARS)
+        // quote/bracket still carries the correct sentence intonation.
+        val text = stripTrailingNoise(chunk.text)
         chunk.synthStartAt = android.os.SystemClock.elapsedRealtime()
         val result = tts.synthesizeToFile(text, Bundle(), chunk.file, synthId)
         Log.d(TAG, "synth_start id=${chunk.id} text_len=${text.length} result=$result")
@@ -504,10 +504,14 @@ internal class FilePipeline(
         /** Shorter beat after a chapter heading, before the chapter body begins. */
         private const val TITLE_PAUSE_MS = 900L
         // Trailing characters sherpa-onnx renders as audible artifacts (a "ktsh" or "snort"
-        // sound after the last word). Include single AND double quote variants, plus their
-        // curly / guillemet relatives. Apostrophes mid-word are unaffected — trimEnd only
-        // touches the actual trailing chars.
-        private val TRAILING_NOISE_CHARS = charArrayOf(
+        // sound after the last word). The sentence terminator (. ! ?) sits BEFORE these, so
+        // trimming them keeps the correct intonation. Two families:
+        //   - quote variants (straight / curly / guillemet), and
+        //   - closing brackets — ".)" / ".]" / ".}" produce the same click as a trailing quote.
+        // Apostrophes / brackets mid-word are unaffected — trimEnd only touches actual trailing
+        // chars. Exposed @VisibleForTesting so a test can assert each member is stripped.
+        @androidx.annotation.VisibleForTesting
+        internal val TRAILING_NOISE_CHARS = charArrayOf(
             '"',     // U+0022 straight double quote
             '\'',    // U+0027 straight single quote / apostrophe
             '“', // “ left double curly
@@ -520,7 +524,13 @@ internal class FilePipeline(
             '›', // › single right guillemet
             '„', // „ low double curly
             '‚', // ‚ low single curly
+            ')', ']', '}',   // closing brackets — same artifact as trailing quotes
             ' ', '\t', '\n', '\r',
         )
+
+        /** Strips trailing noise chars (quotes, brackets, whitespace) that sherpa-onnx would
+         *  otherwise render as an audible click. Pure + testable; used by [synthesise]. */
+        @androidx.annotation.VisibleForTesting
+        internal fun stripTrailingNoise(text: String): String = text.trimEnd(*TRAILING_NOISE_CHARS)
     }
 }

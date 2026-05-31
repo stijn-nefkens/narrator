@@ -25,7 +25,6 @@ import com.example.narrator.NarratorApp
 import com.example.narrator.R
 import com.example.narrator.data.BookEntity
 import com.example.narrator.data.BookWithProgress
-import com.example.narrator.data.ChapterPreview
 import com.example.narrator.data.LibrarySortOrder
 import com.example.narrator.data.PendingImport
 import com.example.narrator.data.PrepareResult
@@ -180,9 +179,12 @@ class LibraryFragment : Fragment() {
             updateActionModeTitle()
             return
         }
+        // Switch to the Player tab FIRST so its loading spinner shows during the parse (a large
+        // PDF takes a few seconds); loading then jumping would show nothing, then land on an
+        // already-loaded Player.
+        (activity as? MainActivity)?.showPlayerTab()
         viewLifecycleOwner.lifecycleScope.launch {
             container.narrator.loadBook(item.book.id)
-            (activity as? MainActivity)?.showPlayerTab()
         }
     }
 
@@ -299,17 +301,25 @@ class LibraryFragment : Fragment() {
                 val newAuthor = authorInput.text.toString().trim().ifBlank { item.book.author }
                 val newSkip = skipInput.text.toString().trim()
                 val newFinished = finishedSwitch.isChecked
+                val titleOrAuthorChanged =
+                    newTitle != item.book.title || newAuthor != item.book.author
+                val skipChanged = newSkip != item.book.skipPatterns
                 viewLifecycleOwner.lifecycleScope.launch {
                     container.bookRepository.updateBookDetails(item.book.id, newTitle, newAuthor)
                     if (newFinished != item.book.isFinished) {
                         container.bookRepository.setFinished(item.book.id, newFinished)
                     }
-                    if (newSkip != item.book.skipPatterns) {
+                    if (skipChanged) {
                         container.bookRepository.updateSkipPatterns(item.book.id, newSkip)
-                        // Re-parse next time the book is loaded by tapping; if it's the
-                        // currently loaded book, reload it now so the new patterns take effect.
-                        if (container.narrator.state.value.loaded?.bookId == item.book.id) {
+                    }
+                    // Propagate to the Player/mini-player/notification if this book is loaded.
+                    if (container.narrator.state.value.loaded?.bookId == item.book.id) {
+                        if (skipChanged) {
+                            // Skip patterns change the parsed content → full reload (re-parse).
                             container.narrator.loadBook(item.book.id)
+                        } else if (titleOrAuthorChanged) {
+                            // Metadata only → refresh in place; no re-parse, no playback break.
+                            container.narrator.refreshLoadedMetadata(item.book.id)
                         }
                     }
                 }
@@ -483,62 +493,21 @@ class LibraryFragment : Fragment() {
             .show()
     }
 
-    /** Runs the prepare step (copy + parse) and routes the result into preview or dup
-     *  dialogs. */
+    /** Copies + parses the picked file (showing the importing spinner over the slow step) and
+     *  commits it directly. The preview dialog was removed — there's no good way to act on a bad
+     *  preview on the phone, and its heuristics just duplicate the parse. The duplicate prompt
+     *  and failure toast still surface. */
     private suspend fun runPrepare(uri: Uri, pageRange: IntRange?) {
-        when (val r = container.bookImporter.prepareImport(uri, pageRange)) {
-            is PrepareResult.Ready -> showImportPreview(r.title, r.author, r.chapterPreviews, r.pending)
-            is PrepareResult.Duplicate -> promptDuplicate(r.existing, r.pending)
-            is PrepareResult.Failed -> toast(getString(R.string.import_failed, r.reason))
+        _binding?.libraryImporting?.visibility = View.VISIBLE
+        try {
+            when (val r = container.bookImporter.prepareImport(uri, pageRange)) {
+                is PrepareResult.Ready -> container.bookImporter.commit(r.pending)
+                is PrepareResult.Duplicate -> promptDuplicate(r.existing, r.pending)
+                is PrepareResult.Failed -> toast(getString(R.string.import_failed, r.reason))
+            }
+        } finally {
+            _binding?.libraryImporting?.visibility = View.GONE
         }
-    }
-
-    /** Preview dialog listing the parsed chapters with their first ~160 characters of body.
-     *  Lets the user back out if extraction looks broken before committing the book. */
-    private fun showImportPreview(
-        title: String,
-        author: String,
-        chapters: List<ChapterPreview>,
-        pending: PendingImport,
-    ) {
-        val ctx = requireContext()
-        val pad = (resources.displayMetrics.density * 16).toInt()
-        val column = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(pad, pad / 2, pad, 0)
-            for (ch in chapters.take(20)) {
-                addView(android.widget.TextView(ctx).apply {
-                    text = "• ${ch.title} (${ch.chunkCount})"
-                    setTypeface(typeface, android.graphics.Typeface.BOLD)
-                    setPadding(0, pad / 2, 0, 0)
-                })
-                if (ch.firstChars.isNotBlank()) {
-                    addView(android.widget.TextView(ctx).apply {
-                        text = ch.firstChars + if (ch.firstChars.length >= 160) "…" else ""
-                        textSize = 13f
-                        setPadding(0, 2, 0, 0)
-                    })
-                }
-            }
-            if (chapters.size > 20) {
-                addView(android.widget.TextView(ctx).apply {
-                    text = getString(R.string.import_preview_more, chapters.size - 20)
-                    setPadding(0, pad, 0, 0)
-                })
-            }
-        }
-        val scroll = android.widget.ScrollView(ctx).apply { addView(column) }
-        AlertDialog.Builder(ctx)
-            .setTitle(getString(R.string.import_preview_title_format, title, author))
-            .setView(scroll)
-            .setPositiveButton(R.string.import_add_to_library) { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch { container.bookImporter.commit(pending) }
-            }
-            .setNegativeButton(R.string.library_cancel) { _, _ ->
-                container.bookImporter.cancel(pending)
-            }
-            .setOnCancelListener { container.bookImporter.cancel(pending) }
-            .show()
     }
 
     private fun promptDuplicate(existing: BookEntity, pending: PendingImport) {

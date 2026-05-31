@@ -25,21 +25,22 @@ internal object Sentences {
      * aggressively when there's no audio banked to cover the synth time:
      *
      *   depth 0 (cold start / starved): 70/45  — fast first audio, the 0.13 behaviour
-     *   depth 1:                        130/90 — most sentences stay whole
-     *   depth 2:                        220/160 — nearly everything whole
+     *   depth 1:                        110/75 — cut a bit more to bank audio faster
+     *   depth 2:                        170/120
      *   depth 3+:                       whole sentence (cap at MAX_CHUNK_CHARS)
      *
-     * So the first sentence after a (re)start stays snappy and everything behind a healthy
-     * buffer is read as one natural utterance; clause/word cutting re-engages only if the engine
-     * falls behind. [threshold] is the length above which a sentence is sub-chunked at all;
-     * [target] is the preferred cut length when it is.
+     * Depths 1–2 were tightened (from 130/90 and 220/160) after testing: an occasional
+     * stop-to-synthesise mid-playback is more jarring than a slightly-glued sentence, so we keep
+     * cutting a touch longer to build buffer headroom before reading whole. Cold start (depth 0)
+     * is unchanged — first audio must stay snappy. [threshold] is the length above which a
+     * sentence is sub-chunked at all; [target] is the preferred cut length when it is.
      */
     data class CutBudget(val threshold: Int, val target: Int)
 
     fun budgetForDepth(depth: Int): CutBudget = when {
         depth <= 0 -> CutBudget(SUB_CHUNK_THRESHOLD, SUB_CHUNK_TARGET)
-        depth == 1 -> CutBudget(130, 90)
-        depth == 2 -> CutBudget(220, 160)
+        depth == 1 -> CutBudget(110, 75)
+        depth == 2 -> CutBudget(170, 120)
         else -> CutBudget(MAX_CHUNK_CHARS, MAX_CHUNK_CHARS)
     }
 
@@ -63,6 +64,36 @@ internal object Sentences {
      */
     fun splitSentences(text: String, locale: Locale = Locale.US): List<String> =
         mergeOnly(rawSentences(text, locale))
+
+    private val SENTENCE_END = charArrayOf('.', '!', '?')
+
+    /**
+     * If [paragraph] begins with the chapter [title] glued to the body — e.g. an inline heading
+     * "Chapter One It was a dark night." or a PDF heading line that ran into the first line —
+     * split it into the heading and the body as TWO separate paragraphs (the heading terminated
+     * with a period). Returning two paragraphs is what keeps them apart: paragraphs are
+     * sentence-split and dialogue-merged *independently*, so the short heading can't be merged
+     * back onto the first body sentence — which is the whole point (it must read on its own and,
+     * being a short chunk 0 matching the title, trigger the chapter-title pause).
+     *
+     * Returns a single-element list (the paragraph unchanged) when the title is blank, the
+     * paragraph IS just the title, the prefix doesn't match at a word boundary, or it's already
+     * "Title. body" (BreakIterator will separate those anyway, but we still split so the heading
+     * lands in its own paragraph and escapes the merge).
+     */
+    fun splitHeadingFromBody(paragraph: String, title: String?): List<String> {
+        val unchanged = listOf(paragraph)
+        val t = title?.trim().orEmpty()
+        val p = paragraph.trimStart()
+        if (t.isEmpty() || p.length <= t.length) return unchanged
+        if (!p.regionMatches(0, t, 0, t.length, ignoreCase = true)) return unchanged
+        // Skip an existing terminator after the title ("Title." / "Title!"), then require a word
+        // boundary — guards against the title being a prefix of a longer word ("Art"/"Artisanal").
+        val idx = (t.length + if (p[t.length] in SENTENCE_END) 1 else 0)
+        val boundaryOk = idx < p.length && p[idx].isWhitespace()
+        val rest = if (boundaryOk) p.substring(idx).trimStart() else ""
+        return if (rest.isEmpty()) unchanged else listOf("${p.substring(0, t.length).trimEnd()}.", rest)
+    }
 
     /** BreakIterator sentence segmentation after [TextNormalize], no merging or sub-chunking. */
     private fun rawSentences(text: String, locale: Locale): List<String> {

@@ -109,4 +109,12 @@
         app:navigationIcon="@android:drawable/ic_menu_close_clear_cancel"
         app:menu="@menu/library_action_mode"
         android:visibility="gone" />
+
+    <!-- Importing spinner: shown over the list while a picked file is copied + parsed. -->
+    <ProgressBar
+        android:id="@+id/library_importing"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
 </FrameLayout>

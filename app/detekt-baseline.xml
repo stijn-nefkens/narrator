@@ -34,6 +34,7 @@
     <ID>MagicNumber:BookImporter.kt$BookImporter$160</ID>
     <ID>MagicNumber:ChapterTickSeekBar.kt$ChapterTickSeekBar$2.5f</ID>
     <ID>MagicNumber:Entities.kt$BookWithProgress$100</ID>
+    <ID>MagicNumber:Entities.kt$BookWithProgress$99</ID>
     <ID>MagicNumber:EpubParser.kt$EpubParser$0.7</ID>
     <ID>MagicNumber:EpubParser.kt$EpubParser$3</ID>
     <ID>MagicNumber:EpubParser.kt$EpubParser$40</ID>
@@ -42,11 +43,7 @@
     <ID>MagicNumber:FilePipeline.kt$FilePipeline$24000</ID>
     <ID>MagicNumber:FilePipeline.kt$FilePipeline$3</ID>
     <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$12f</ID>
-    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$13f</ID>
-    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$16</ID>
-    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$160</ID>
     <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$2</ID>
-    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$20</ID>
     <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$24</ID>
     <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$4</ID>
     <ID>MagicNumber:Narrator.kt$Narrator$0.1f</ID>
@@ -60,6 +57,7 @@
     <ID>MagicNumber:Narrator.kt$Narrator.&lt;no name provided&gt;$8</ID>
     <ID>MagicNumber:NarratorDatabase.kt$NarratorDatabase$3</ID>
     <ID>MagicNumber:NarratorDatabase.kt$NarratorDatabase$4</ID>
+    <ID>MagicNumber:NarratorDatabase.kt$NarratorDatabase$5</ID>
     <ID>MagicNumber:PdfParser.kt$PdfParser$0.4</ID>
     <ID>MagicNumber:PdfParser.kt$PdfParser$0.5</ID>
     <ID>MagicNumber:PdfParser.kt$PdfParser$0.6</ID>
@@ -88,7 +86,6 @@
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$30</ID>
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$30f</ID>
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$4</ID>
-    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$40</ID>
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$5</ID>
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$60</ID>
     <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$600</ID>
@@ -172,6 +169,7 @@
     <ID>ReturnCount:PdfParser.kt$PdfParser$private fun looksLikeFrontMatter(c: Chapter): Boolean</ID>
     <ID>ReturnCount:PdfParser.kt$PdfParser$private fun stripHeadersAndFooters(lines: List&lt;StyledLine&gt;): List&lt;StyledLine&gt;</ID>
     <ID>ReturnCount:PlayerFragment.kt$PlayerFragment$private fun snapToWordEnd(text: String, charsSpoken: Int): Int</ID>
+    <ID>ReturnCount:Sentences.kt$Sentences$fun splitHeadingFromBody(paragraph: String, title: String?): List&lt;String&gt;</ID>
     <ID>ReturnCount:TextCleaner.kt$TextCleaner$private fun romanToInt(s: String): Int</ID>
     <ID>ReturnCount:WavFadeOut.kt$WavFadeOut$private fun applyFades(raf: RandomAccessFile)</ID>
     <ID>SpreadOperator:FilePipeline.kt$FilePipeline.Companion$(*TRAILING_NOISE_CHARS)</ID>

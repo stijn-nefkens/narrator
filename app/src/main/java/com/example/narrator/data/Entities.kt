@@ -44,8 +44,13 @@ data class BookWithProgress(
 ) {
     val progressPercent: Int
         get() {
+            // 100% means *finished*, not "on the last sentence" — the playhead can only reach
+            // totalChunks-1 (the last sentence index), which is ~99%, so a book read to the end
+            // would otherwise stick just below 100. Reaching the end auto-sets isFinished
+            // (Narrator.onChunkComplete), so finished == 100 and in-progress caps at 99.
+            if (book.isFinished) return 100
             val total = book.totalChunks
             val done = bookmark?.globalChunk ?: 0
-            return if (total <= 0) 0 else ((done.toDouble() / total) * 100).toInt().coerceIn(0, 100)
+            return if (total <= 0) 0 else ((done.toDouble() / total) * 100).toInt().coerceIn(0, 99)
         }
 }

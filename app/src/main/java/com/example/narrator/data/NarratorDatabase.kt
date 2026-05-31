@@ -43,11 +43,20 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
                 "ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_IS_FINISHED INTEGER NOT NULL DEFAULT 0"
             )
         }
+        if (oldVersion < 5) {
+            // One-time reset of resume positions. Up to 0.16 the parsers sub-chunked sentences
+            // (many small chunks); from 0.16 they emit whole sentences (far fewer). A bookmark's
+            // globalChunk recorded in the OLD unit is meaningless against the NEW totalChunks,
+            // giving wrong progress % (e.g. 90% at the halfway mark) and a wrong resume position.
+            // There's no precise conversion, so clear resume bookmarks once — books restart from
+            // the beginning with correct counts. Named (saved) bookmarks are kept.
+            db.execSQL("DELETE FROM $TABLE_BOOKMARKS")
+        }
     }
 
     companion object {
         private const val DATABASE_NAME = "narrator.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
 
         const val TABLE_BOOKS = "books"
         const val COL_ID = "id"

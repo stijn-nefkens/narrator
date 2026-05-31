@@ -3,6 +3,65 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.18.0 — 2026-05-31
+
+Progress-percentage accuracy, chapter-title separation, import-flow
+cleanup. Schema migrates v4 → v5.
+
+- **Finished = 100%** (was stuck at 99%): the playhead only reaches the
+  last sentence index (~99%), so a fully-read book never hit 100.
+  `Narrator.onChunkComplete` auto-sets `isFinished` at end-of-book;
+  `progressPercent` returns 100 when finished, caps in-progress at 99. The
+  book dims like a manually-finished one.
+- **Stale progress fixed** for pre-0.16 books: imported when parsers
+  sub-chunked (many chunks), now whole sentences (fewer), so an old-unit
+  `globalChunk` against the recomputed `totalChunks` gave a wrong % (e.g.
+  90% at the halfway mark) and wrong resume point. No precise conversion
+  exists → migration v4→v5 clears resume bookmarks once (named bookmarks
+  kept); affected books restart from 0 with correct counts.
+- **Chapter title no longer glued to the first sentence**: a heading
+  carries no period, so it fused with the first body sentence into one
+  chunk (read without a break, too long to trigger the title pause).
+  `Sentences.splitHeadingFromBody` splits a glued heading into its own
+  *paragraph* (terminated) so it becomes its own chunk — escaping the
+  dialogue-merge — and the title pause fires. EpubParser + PdfParser;
+  unit-tested.
+- **Loading spinner when opening a book**: `onBookClicked` switches to the
+  Player tab *before* `loadBook`, so the spinner shows during the parse.
+- **Loading spinner when importing**: a `library_importing` ProgressBar
+  over the copy+parse step.
+- **Import preview removed**: importing is one tap. Duplicate prompt +
+  failure toast remain; PDF page-range dialog unaffected.
+- **Separate bookmark export removed**: the library backup (Settings)
+  already includes the saved-bookmarks table.
+
+## 0.17.0 — 2026-05-31
+
+Title-sync fix + the duplication it exposed, trailing-bracket audio fix,
+and a dynamic-chopping tune.
+
+- **Library title/author edits now reach the Player** (+ mini-player +
+  notification), live, without a re-parse or playback interruption. Root
+  cause was a duplicated source of truth: `LoadedBook.title/author` came
+  from the *parsed file*, while the Library showed the *DB* row, so edits
+  never matched. Merged onto the DB as the single authority — the parsed
+  `Book` is now content-only (chapters/chunks/cover), its embedded
+  title/author used solely at import. New pure `LoadedBook.from(book,
+  parsed, totalChunks)` factory (unit-tested) is the one seam that builds
+  the Player view-model; `Narrator.refreshLoadedMetadata(bookId)` updates
+  the loaded book in place on edit.
+- **Trailing-bracket click fixed**: `)` `]` `}` added to
+  `FilePipeline.TRAILING_NOISE_CHARS`, so a sentence ending ".)" / ".]"
+  no longer renders the "ktsh" artifact (same class as the earlier
+  trailing-quote fix). Extracted `stripTrailingNoise` as a pure
+  `@VisibleForTesting` function with a test asserting every member is
+  stripped while the terminator survives.
+- **Dynamic chopping tuned**: `budgetForDepth` depth 1 130/90 → 110/75,
+  depth 2 220/160 → 170/120 (cold start and whole-at-depth-3 unchanged).
+  Cuts a touch more at shallow buffer to bank audio faster — an occasional
+  stop-to-synthesise mid-playback is more jarring than a slightly-glued
+  sentence.
+
 ## 0.16.2 — 2026-05-31
 
 Caption shows the whole sentence; highlight is segment-offset-aware.
