@@ -33,6 +33,8 @@ Fairphone but works on any Android 8.0+ device.
 ./gradlew :app:assembleDebug          # debug APK at app/build/outputs/apk/debug/
 ./gradlew :app:testDebugUnitTest      # all JVM tests (must pass before commit)
 ./gradlew :app:lintDebug              # Android Lint
+./gradlew :app:detekt                 # Kotlin static analysis (baseline: app/detekt-baseline.xml)
+./gradlew :app:detektBaseline         # regenerate the detekt baseline (deliberate, after a batch)
 ./gradlew :app:assembleRelease        # release APK (needs app/keystore.properties)
 ```
 
@@ -129,12 +131,38 @@ forks rather than blocking on every detail.
 ## CI
 
 `.github/workflows/android.yml` runs on every push, every PR, and every `v*` tag.
+It runs, in order: `assembleDebug`, `testDebugUnitTest`, `lintDebug`, `detekt`.
 
 - gradlew must have the executable bit (use `git update-index --chmod=+x gradlew`
   on Windows).
 - Tagged builds produce signed release APKs IF the `RELEASE_KEYSTORE_BASE64`,
   `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` secrets
   are set. Otherwise the build runs unsigned and skips the attach step.
+
+## How we work on this repo (process)
+
+These three rules emerged from real failures in this project; follow them.
+
+1. **Verify on the device before tagging a release.** Several releases shipped
+   UI/audio changes that looked right in code but were wrong in the app (caption
+   desync, highlight jump-back). The phone is a Fairphone 6 (`f697a26b`); drive it
+   over adb and *observe* the changed behaviour — screenshot for UI, FilePipeline
+   logcat (`TIMING synth` / `TIMING play`) for playback — before `git tag`. Get tap
+   coordinates from `uiautomator dump` (pause first so the UI idles; the highlight
+   tick blocks "idle"); never eyeball them off the scaled screenshot. Use PowerShell
+   for `adb pull /sdcard/...` (git-bash rewrites the path). If the device is
+   unreachable, commit but DON'T tag — leave the release for a verified moment.
+
+2. **detekt + Android Lint gate every change.** Both run in CI with frozen
+   baselines (`detekt-baseline.xml`, `lint-baseline.xml`) so only NEW findings fail.
+   Run `:app:detekt` and `:app:lintDebug` locally before committing.
+
+3. **A bug in Android-coupled code → extract a pure function + unit test.** Every
+   recent bug lived in code that needed a device to exercise (title sync, sentence
+   cutting, highlight). The durable fixes all came from pulling the logic into a
+   pure, testable seam (`BackupArchive`, `Sentences`, `TextNormalize`,
+   `LoadedBook.from`, `stripTrailingNoise`) with a regression test. Do that rather
+   than fixing in place — the test is what stops the bug from recurring.
 
 ## What not to do
 

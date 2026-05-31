@@ -1,0 +1,205 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:FilePipeline.kt$FilePipeline$titlePause &amp;&amp; next != null &amp;&amp; next.synthDone &amp;&amp; !paused &amp;&amp; pendingDelayedStart == null</ID>
+    <ID>ComplexCondition:WavFadeOut.kt$WavFadeOut$dataStart &lt; 0 || sampleRate == 0 || channels == 0 || bitsPerSample != 16</ID>
+    <ID>CyclomaticComplexMethod:BookImporter.kt$BookImporter$suspend fun prepareImport(uri: Uri, pageRange: IntRange?): PrepareResult</ID>
+    <ID>CyclomaticComplexMethod:LibraryFragment.kt$LibraryFragment$private fun applyFilterSort()</ID>
+    <ID>CyclomaticComplexMethod:LibraryFragment.kt$LibraryFragment$private fun openRenameDialog(item: BookWithProgress)</ID>
+    <ID>CyclomaticComplexMethod:PlayerFragment.kt$PlayerFragment$@Suppress("ClickableViewAccessibility") private fun setupSpeedGesture()</ID>
+    <ID>CyclomaticComplexMethod:WavFadeOut.kt$WavFadeOut$private fun applyFades(raf: RandomAccessFile)</ID>
+    <ID>EmptyFunctionBlock:FilePipeline.kt$FilePipeline.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:LibraryFragment.kt$LibraryFragment.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;${}</ID>
+    <ID>LongMethod:LibraryFragment.kt$LibraryFragment$private fun openRenameDialog(item: BookWithProgress)</ID>
+    <ID>LongMethod:PlayerFragment.kt$PlayerFragment$@Suppress("ClickableViewAccessibility") private fun setupSpeedGesture()</ID>
+    <ID>LongMethod:PlayerFragment.kt$PlayerFragment$private fun render(state: NarratorState)</ID>
+    <ID>LongMethod:WavFadeOut.kt$WavFadeOut$private fun applyFades(raf: RandomAccessFile)</ID>
+    <ID>LongParameterList:BookRepository.kt$BookRepository$( existingId: Long, title: String, author: String, epubPath: String, coverPath: String?, totalChunks: Int, pageRangeStart: Int = 0, pageRangeEnd: Int = 0, )</ID>
+    <ID>LongParameterList:BookRepository.kt$BookRepository$( title: String, author: String, epubPath: String, coverPath: String?, totalChunks: Int, pageRangeStart: Int = 0, pageRangeEnd: Int = 0, )</ID>
+    <ID>LongParameterList:EpubParser.kt$EpubParser$( spineHref: String, spineAbsPath: String, spineIndex: Int, xhtml: String, tocByFragment: List&lt;Pair&lt;String?, String&gt;&gt;, locale: Locale, )</ID>
+    <ID>LongParameterList:EpubParser.kt$EpubParser$( xhtml: String, preFragmentTitle: String?, fragments: Map&lt;String, String&gt;, spineIndex: Int, spineAbsPath: String, locale: Locale, )</ID>
+    <ID>LoopWithTooManyJumpStatements:Narrator.kt$Narrator$for</ID>
+    <ID>MagicNumber:AppPreferences.kt$AppPreferences$0.5f</ID>
+    <ID>MagicNumber:AppPreferences.kt$AppPreferences$0.8f</ID>
+    <ID>MagicNumber:AppPreferences.kt$AppPreferences$1.5f</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$24L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$3_600_000L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$60L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$60_000L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$7L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter$86_400_000L</ID>
+    <ID>MagicNumber:BookAdapter.kt$BookAdapter.ViewHolder$0.6f</ID>
+    <ID>MagicNumber:BookImporter.kt$BookImporter$160</ID>
+    <ID>MagicNumber:ChapterTickSeekBar.kt$ChapterTickSeekBar$2.5f</ID>
+    <ID>MagicNumber:Entities.kt$BookWithProgress$100</ID>
+    <ID>MagicNumber:EpubParser.kt$EpubParser$0.7</ID>
+    <ID>MagicNumber:EpubParser.kt$EpubParser$3</ID>
+    <ID>MagicNumber:EpubParser.kt$EpubParser$40</ID>
+    <ID>MagicNumber:FilePipeline.kt$FilePipeline$0.5f</ID>
+    <ID>MagicNumber:FilePipeline.kt$FilePipeline$2.5f</ID>
+    <ID>MagicNumber:FilePipeline.kt$FilePipeline$24000</ID>
+    <ID>MagicNumber:FilePipeline.kt$FilePipeline$3</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$12f</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$13f</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$16</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$160</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$2</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$20</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$24</ID>
+    <ID>MagicNumber:LibraryFragment.kt$LibraryFragment$4</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$0.1f</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$0.8f</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$1000L</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$100L</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$200L</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$3</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator$30_000L</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator.&lt;no name provided&gt;$0.75f</ID>
+    <ID>MagicNumber:Narrator.kt$Narrator.&lt;no name provided&gt;$8</ID>
+    <ID>MagicNumber:NarratorDatabase.kt$NarratorDatabase$3</ID>
+    <ID>MagicNumber:NarratorDatabase.kt$NarratorDatabase$4</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$0.4</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$0.5</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$0.6</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$0.7</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$0.75f</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$1.2f</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$1.5f</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$10</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$100</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$120</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$1500</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$220</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$3</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$40</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$6</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$60</ID>
+    <ID>MagicNumber:PdfParser.kt$PdfParser$90</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$0.001f</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$0.1f</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$0.8f</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$100</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$1000L</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$15</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$24</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$3</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$30</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$30f</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$4</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$40</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$5</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$60</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$600</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$60_000L</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$64</ID>
+    <ID>MagicNumber:PlayerFragment.kt$PlayerFragment$70</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$0.5</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$0.8</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$1.5</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$110</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$120</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$170</ID>
+    <ID>MagicNumber:Sentences.kt$Sentences$75</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$0.05f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$0.1f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$0.5f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$0.8f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$12</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment$20</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;$0.05f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;$0.1f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;$0.5f</ID>
+    <ID>MagicNumber:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;$0.8f</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$0xFB00</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$0xFB06</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$10</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$100</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$1000</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$3999</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$4</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$40</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$400</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$5</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$50</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$500</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$9</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$90</ID>
+    <ID>MagicNumber:TextCleaner.kt$TextCleaner$900</ID>
+    <ID>MagicNumber:TextNormalize.kt$TextNormalize$4</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$0xFF</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$1000</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$16</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$24</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$3</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$32767</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$32768</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$4</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$44</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$6</ID>
+    <ID>MagicNumber:WavFadeOut.kt$WavFadeOut$8</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$0xFF</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$16</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$24</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$3</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$4</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$44</ID>
+    <ID>MagicNumber:WavInfo.kt$WavInfo$8</ID>
+    <ID>MaxLineLength:HtmlToText.kt$HtmlToText$return cls.split(WHITESPACE).any { it.startsWith("page") &amp;&amp; it.contains("num") || it == "page" || it == "pagenumber" }</ID>
+    <ID>MaxLineLength:PlayerFragment.kt$PlayerFragment$val base = ContextCompat.getColor(requireContext(), com.google.android.material.R.color.design_default_color_primary)</ID>
+    <ID>MaxLineLength:VoiceSetupActivity.kt$VoiceSetupActivity$Toast.makeText(this, getString(R.string.voice_setup_open_engine_failed, label), Toast.LENGTH_SHORT).show()</ID>
+    <ID>MaxLineLength:VoiceSetupActivity.kt$VoiceSetupActivity.Companion$"https://huggingface.co/csukuangfj2/sherpa-onnx-apk/resolve/main/tts-engine-new/1.13.1/sherpa-onnx-1.13.1-arm64-v8a-en-tts-engine-kokoro-en-v0_19.apk"</ID>
+    <ID>NestedBlockDepth:BackupArchive.kt$BackupArchive$fun read(input: InputStream, stagingDir: File): ReadSummary</ID>
+    <ID>NestedBlockDepth:Sentences.kt$Sentences$private fun findClauseCut(text: String, target: Int): Int</ID>
+    <ID>NestedBlockDepth:WavInfo.kt$WavInfo$fun sampleRate(file: File): Int</ID>
+    <ID>NewLineAtEndOfFile:ExampleUnitTest.kt$com.example.narrator.ExampleUnitTest.kt</ID>
+    <ID>ReturnCount:BookImporter.kt$BookImporter$private fun detectFormat(uri: Uri, displayName: String?): SourceFormat</ID>
+    <ID>ReturnCount:EpubParser.kt$EpubParser$private fun chaptersForFile( spineHref: String, spineAbsPath: String, spineIndex: Int, xhtml: String, tocByFragment: List&lt;Pair&lt;String?, String&gt;&gt;, locale: Locale, ): List&lt;RawChapter&gt;</ID>
+    <ID>ReturnCount:EpubParser.kt$EpubParser$private fun findFragmentInOrUnder(el: Element, fragments: Set&lt;String&gt;): String?</ID>
+    <ID>ReturnCount:EpubParser.kt$EpubParser$private fun looksLikeToc(chapter: RawChapter): Boolean</ID>
+    <ID>ReturnCount:EpubParser.kt$EpubParser$private fun readToc(zip: ZipReader, opf: OpfDocument, opfDir: String): TocResult</ID>
+    <ID>ReturnCount:FilePipeline.kt$FilePipeline$private fun tryStartNextFromQueue()</ID>
+    <ID>ReturnCount:HtmlToText.kt$HtmlToText$private fun isFootnoteMarker(el: Element): Boolean</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$fun currentSpokenCharEnd(): Int</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$fun remainingMs(): Long</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$private fun isChapterTitlePosition(pos: Position): Boolean</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$private fun onChunkComplete()</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$private fun parseUtteranceId(id: String?): ParsedId?</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$private fun positionAhead(from: Position, ahead: Int): Position?</ID>
+    <ID>ReturnCount:Narrator.kt$Narrator$private fun queueAheadCount(from: Position, count: Int)</ID>
+    <ID>ReturnCount:Paths.kt$Paths$fun resolve(baseDir: String, relative: String): String</ID>
+    <ID>ReturnCount:PdfParser.kt$PdfParser$private fun looksLikeFrontMatter(c: Chapter): Boolean</ID>
+    <ID>ReturnCount:PdfParser.kt$PdfParser$private fun stripHeadersAndFooters(lines: List&lt;StyledLine&gt;): List&lt;StyledLine&gt;</ID>
+    <ID>ReturnCount:PlayerFragment.kt$PlayerFragment$private fun snapToWordEnd(text: String, charsSpoken: Int): Int</ID>
+    <ID>ReturnCount:TextCleaner.kt$TextCleaner$private fun romanToInt(s: String): Int</ID>
+    <ID>ReturnCount:WavFadeOut.kt$WavFadeOut$private fun applyFades(raf: RandomAccessFile)</ID>
+    <ID>SpreadOperator:FilePipeline.kt$FilePipeline.Companion$(*TRAILING_NOISE_CHARS)</ID>
+    <ID>SwallowedException:PdfParser.kt$PdfParser$e: InvalidPasswordException</ID>
+    <ID>ThrowsCount:Container.kt$Container$fun rootfilePath(zip: ZipReader): String</ID>
+    <ID>ThrowsCount:PdfParser.kt$PdfParser$fun parse(input: InputStream, pageRange: IntRange? = null): Book</ID>
+    <ID>TooGenericExceptionCaught:BookImporter.kt$BookImporter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EpubParser.kt$EpubParser$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FilePipeline.kt$FilePipeline$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:Narrator.kt$Narrator$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PdfParser.kt$PdfParser$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WavFadeOut.kt$WavFadeOut$e: Exception</ID>
+    <ID>TooManyFunctions:BookAdapter.kt$BookAdapter : ListAdapter</ID>
+    <ID>TooManyFunctions:BookImporter.kt$BookImporter</ID>
+    <ID>TooManyFunctions:BookRepository.kt$BookRepository</ID>
+    <ID>TooManyFunctions:EpubParser.kt$EpubParser</ID>
+    <ID>TooManyFunctions:FilePipeline.kt$FilePipeline</ID>
+    <ID>TooManyFunctions:LibraryFragment.kt$LibraryFragment : Fragment</ID>
+    <ID>TooManyFunctions:Narrator.kt$Narrator</ID>
+    <ID>TooManyFunctions:PdfParser.kt$PdfParser</ID>
+    <ID>TooManyFunctions:PlayerFragment.kt$PlayerFragment : Fragment</ID>
+    <ID>TooManyFunctions:Sentences.kt$Sentences</ID>
+    <ID>TooManyFunctions:TextCleaner.kt$TextCleaner</ID>
+    <ID>UnusedParameter:EpubParser.kt$EpubParser$spineHref: String</ID>
+    <ID>UseCheckOrError:BackupArchive.kt$BackupArchive$throw IllegalStateException("Backup ZIP is missing narrator.db")</ID>
+    <ID>UseCheckOrError:BackupManager.kt$BackupManager$throw IllegalStateException("Could not open destination")</ID>
+    <ID>UseCheckOrError:BackupManager.kt$BackupManager$throw IllegalStateException("Could not open source")</ID>
+    <ID>UseCheckOrError:BookImporter.kt$BookImporter$throw IllegalStateException("Could not open content URI")</ID>
+    <ID>WildcardImport:ExampleUnitTest.kt$import org.junit.Assert.*</ID>
+  </CurrentIssues>
+</SmellBaseline>

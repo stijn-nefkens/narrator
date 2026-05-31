@@ -3,6 +3,7 @@ import java.io.FileInputStream
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.detekt)
 }
 
 // Optional release signing config. Provide app/keystore.properties (gitignored) with:
@@ -73,6 +74,17 @@ android {
         abortOnError = true
         baseline = file("lint-baseline.xml")
     }
+}
+
+// detekt — Kotlin static analysis. Same philosophy as the Android Lint baseline above:
+// detekt-baseline.xml freezes all findings that existed when it was introduced, so CI fails
+// only on NEW issues. Regenerate the baseline deliberately with `./gradlew :app:detektBaseline`
+// after an intentional batch of new findings.
+detekt {
+    buildUponDefaultConfig = true
+    baseline = file("detekt-baseline.xml")
+    // Analyse main + test sources; the per-variant Android source sets aren't needed.
+    source.setFrom("src/main/java", "src/test/java")
 }
 
 dependencies {

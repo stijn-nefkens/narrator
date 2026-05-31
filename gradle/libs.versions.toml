@@ -16,6 +16,7 @@ coroutines = "1.9.0"
 media = "1.7.0"
 palette = "1.0.0"
 pdfboxAndroid = "2.0.27.0"
+detekt = "1.23.7"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -38,4 +39,5 @@ pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 

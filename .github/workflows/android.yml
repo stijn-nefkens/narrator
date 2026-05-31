@@ -32,6 +32,9 @@ jobs:
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
 
+      - name: Run detekt (Kotlin static analysis)
+        run: ./gradlew :app:detekt
+
       - name: Decode signing keystore
         if: startsWith(github.ref, 'refs/tags/v')
         env:
