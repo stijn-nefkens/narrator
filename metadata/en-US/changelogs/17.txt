@@ -1,0 +1,9 @@
+Better Roman numerals and table handling in PDFs.
+
+- Roman numerals in ordinary text are now read as numbers:
+  "Louis XIV" → "Louis 14", "World War II" → "World War 2". The
+  pronoun "I" and common abbreviations (CD, DC, MIX…) are left
+  alone.
+- Tables in PDFs are detected and skipped more reliably, including
+  shorter tables and tightly-set numeric tables (years and figures
+  in columns) that previously got read out row by row.

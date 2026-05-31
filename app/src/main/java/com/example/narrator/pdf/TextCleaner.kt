@@ -32,6 +32,7 @@ internal object TextCleaner {
         s = stripBulletPrefixes(s)
         s = expandAbbreviations(s)
         s = romanNumeralsInHeadings(s)
+        s = romanNumeralsInBody(s)
         s = collapseWhitespace(s)
         return s
     }
@@ -152,6 +153,35 @@ internal object TextCleaner {
             if (arabic > 0) arabic.toString() else m.value
         }
 
+    /**
+     * Body-text Roman conversion (outside the Chapter/Part marker case [romanNumeralsInHeadings]
+     * already handles): "Louis XIV" → "Louis 14", "World War II" → "World War 2", "the XIX
+     * century" → "the 19 century". sherpa otherwise spells these letter-by-letter ("eks-eye-vee").
+     *
+     * Three guards keep this from mangling ordinary prose:
+     *   - `{2,}` requires at least two roman letters, so the pronoun "I" (and a standalone "A"/"V"
+     *     etc.) is never touched.
+     *   - Canonical validation: the token must be the *canonical* spelling of its value
+     *     ("IIII" / "VV" / "IL" are rejected), which alone discards most all-caps words that
+     *     happen to use only roman letters ("DIM" → not canonical → kept).
+     *   - A small blocklist for the few short all-caps tokens that ARE canonical romans but are
+     *     far more often English abbreviations: mm, CD, DC, MD, MC, MI, MIX, DIV, CIV. Extend
+     *     this only with a test case, per the abbreviation-list discipline.
+     */
+    private val bodyRoman = Regex("\\b[IVXLCDM]{2,}\\b")
+    private val romanWordBlocklist = setOf(
+        "MM", "MC", "MD", "MI", "CD", "DC", "MIX", "DIV", "CIV",
+    )
+
+    private fun romanNumeralsInBody(s: String): String {
+        if (s.length < 2) return s
+        return bodyRoman.replace(s) { m ->
+            if (m.value in romanWordBlocklist) return@replace m.value
+            val arabic = romanToIntCanonical(m.value)
+            if (arabic > 0) arabic.toString() else m.value
+        }
+    }
+
     private fun romanToInt(s: String): Int {
         if (s.isEmpty()) return 0
         val map = mapOf('I' to 1, 'V' to 5, 'X' to 10, 'L' to 50, 'C' to 100, 'D' to 500, 'M' to 1000)
@@ -164,6 +194,32 @@ internal object TextCleaner {
         }
         // Sanity check: round-trip back to verify we have a well-formed numeral.
         return if (total in 1..3999) total else 0
+    }
+
+    /** Like [romanToInt] but additionally requires the input to be the canonical spelling of
+     *  its value — rejects subtractive/repeat malformations ("IIII", "VV", "IL", "XM") that
+     *  [romanToInt] would otherwise accept. Returns 0 for anything non-canonical. */
+    private fun romanToIntCanonical(s: String): Int {
+        val n = romanToInt(s)
+        return if (n > 0 && intToRoman(n) == s) n else 0
+    }
+
+    private val romanUnits = listOf(
+        1000 to "M", 900 to "CM", 500 to "D", 400 to "CD",
+        100 to "C", 90 to "XC", 50 to "L", 40 to "XL",
+        10 to "X", 9 to "IX", 5 to "V", 4 to "IV", 1 to "I",
+    )
+
+    private fun intToRoman(n: Int): String {
+        var remaining = n
+        val sb = StringBuilder()
+        for ((value, symbol) in romanUnits) {
+            while (remaining >= value) {
+                sb.append(symbol)
+                remaining -= value
+            }
+        }
+        return sb.toString()
     }
 
     private val multiWs = Regex("[\\s\\u00A0\\u2000-\\u200B]+")

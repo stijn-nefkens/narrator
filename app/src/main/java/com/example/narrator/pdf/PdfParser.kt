@@ -285,25 +285,42 @@ object PdfParser {
         return lines.filterNot { it.fontSize in 0f..threshold && it.fontSize > 0 }
     }
 
-    /** Drops runs of 4+ consecutive table-shaped lines. A "table-shaped" line has at least
-     *  two runs of 3+ consecutive spaces (PDFBox's marker for column-aligned cells under
-     *  sortByPosition mode). Reading a table row-by-row produces nonsense ("Year Country
-     *  Population 1990 Netherlands 15 million 2000 Netherlands 16 million"), so for a v1
-     *  we drop the entire region. Poetry and indented dialogue don't hit this threshold
-     *  because they don't have multiple wide internal gaps per line. */
+    /** Drops runs of 3+ consecutive table-shaped lines. A line is "table-shaped" if either:
+     *    - it has two or more runs of 3+ consecutive spaces (PDFBox's marker for column-aligned
+     *      cells under sortByPosition mode), or
+     *    - it's a numeric row: 3+ whitespace-separated tokens of which at least half are numbers
+     *      (years, figures, percentages). This catches tightly-set numeric tables whose columns
+     *      don't leave wide gaps.
+     *  Reading a table row-by-row produces nonsense ("Year Country Population 1990 Netherlands
+     *  15 million 2000 ..."), so we drop the whole region. Guarded against false positives:
+     *  prose paragraphs have at most one number or two per line (numeric ratio stays under half),
+     *  and poetry / indented dialogue have a single internal gap, not two. */
+    @androidx.annotation.VisibleForTesting
+    internal fun isTabularLine(text: String): Boolean {
+        val wideGaps = Regex("\\s{3,}").findAll(text).count()
+        if (wideGaps >= 2) return true
+        return isNumericRow(text)
+    }
+
+    private val numericToken = Regex("^[€$£]?\\d[\\d.,:%/–-]*%?$")
+
+    private fun isNumericRow(text: String): Boolean {
+        val tokens = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.size < 3) return false
+        val numeric = tokens.count { numericToken.matches(it) }
+        return numeric >= 2 && numeric.toDouble() / tokens.size >= 0.5
+    }
+
     private fun stripTableRuns(lines: List<StyledLine>): List<StyledLine> {
-        if (lines.size < 4) return lines
-        val tabular = Regex("\\s{3,}")
-        val flags = BooleanArray(lines.size) { i ->
-            tabular.findAll(lines[i].text).count() >= 2
-        }
+        if (lines.size < 3) return lines
+        val flags = BooleanArray(lines.size) { i -> isTabularLine(lines[i].text) }
         val drop = BooleanArray(lines.size)
         var i = 0
         while (i < lines.size) {
             if (!flags[i]) { i++; continue }
             var j = i
             while (j < lines.size && flags[j]) j++
-            if (j - i >= 4) {
+            if (j - i >= 3) {
                 for (k in i until j) drop[k] = true
             }
             i = j

@@ -3,6 +3,28 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.14.0 — 2026-05-31
+
+PDF text-handling: body Roman numerals + stronger table detection.
+
+- **Roman numerals in body text**: `TextCleaner.romanNumeralsInBody`
+  converts standalone multi-letter romans outside the existing
+  Chapter/Part marker path — "Louis XIV" → "Louis 14", "World War II" →
+  "World War 2", "the XIX century" → "the 19 century". Three guards
+  against prose damage: `{2,}` (never touches the pronoun "I" or single
+  letters); canonical validation (rejects "IIII"/"VV"/"IL" and most
+  all-caps roman-letter words like "DIM"); and a blocklist for the few
+  short tokens that are canonical romans but usually abbreviations
+  (`MM, MC, MD, MI, CD, DC, MIX, DIV, CIV`). Title conversion is
+  unchanged.
+- **Stronger table detection**: `stripTableRuns` now drops runs of 3+
+  table-shaped lines (was 4+) and recognises *numeric rows* (3+ tokens,
+  ≥half numbers) in addition to the existing wide-gap rule — so
+  tightly-set numeric tables (years/figures with narrow columns) and
+  shorter tables are caught. Prose with the odd number per line stays
+  (numeric ratio under half), and single-gap verse/dialogue is untouched.
+  `isTabularLine` extracted and unit-tested.
+
 ## 0.13.0 — 2026-05-31
 
 First-audio latency fix for unpunctuated long sentences.

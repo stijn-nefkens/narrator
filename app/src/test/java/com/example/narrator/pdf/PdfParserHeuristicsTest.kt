@@ -100,6 +100,28 @@ class PdfParserHeuristicsTest {
         ))
     }
 
+    // --- table detection -------------------------------------------------
+
+    @Test fun `wide-gap line is tabular`() {
+        // Two column gaps of 3+ spaces — the classic aligned table row.
+        assertTrue(PdfParser.isTabularLine("Year      Country        Population"))
+    }
+
+    @Test fun `numeric row is tabular even without wide gaps`() {
+        // Tightly-set numeric table: years and figures, single spaces.
+        assertTrue(PdfParser.isTabularLine("1990 15.2 16.1 3.4 8"))
+        assertTrue(PdfParser.isTabularLine("2000 16,1 17 4"))
+    }
+
+    @Test fun `prose with a couple of numbers is not tabular`() {
+        assertFalse(PdfParser.isTabularLine("In 1990 the population was 15 million people."))
+        assertFalse(PdfParser.isTabularLine("She turned 21 that year and moved away."))
+    }
+
+    @Test fun `single-gap line such as verse is not tabular`() {
+        assertFalse(PdfParser.isTabularLine("Roses are red        violets are blue"))
+    }
+
     // --- paragraph assembly ----------------------------------------------
 
     @Test fun `joins consecutive lines with spaces`() {

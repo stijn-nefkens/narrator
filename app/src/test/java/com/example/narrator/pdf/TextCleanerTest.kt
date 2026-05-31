@@ -54,11 +54,33 @@ class TextCleanerTest {
         )
     }
 
-    @Test fun `converts roman numerals only in chapter headings`() {
+    @Test fun `converts roman numerals after chapter markers`() {
         // Plain "Chapter XIV" should become "Chapter 14"...
         assertEquals("Chapter 14 begins", TextCleaner.clean("Chapter XIV begins"))
-        // ...but a standalone "I" elsewhere should not turn into "1".
+        // ...and single-letter "Part I" too (handled by the marker-word path).
+        assertEquals("Part 1 of the saga", TextCleaner.clean("Part I of the saga"))
+    }
+
+    @Test fun `converts multi-letter roman numerals in body text`() {
+        assertEquals("Louis 14 reigned long", TextCleaner.clean("Louis XIV reigned long"))
+        assertEquals("World War 2 ended", TextCleaner.clean("World War II ended"))
+        assertEquals("the 19 century", TextCleaner.clean("the XIX century"))
+        assertEquals("Henry 8 had six wives", TextCleaner.clean("Henry VIII had six wives"))
+    }
+
+    @Test fun `does not convert the pronoun I or single letters in body text`() {
         assertEquals("I had a thought", TextCleaner.clean("I had a thought"))
+        // A lone "V" or "X" mid-sentence stays put.
+        assertEquals("point A to V", TextCleaner.clean("point A to V"))
+    }
+
+    @Test fun `does not convert non-canonical or blocklisted roman-letter words`() {
+        // Non-canonical malformations are rejected by the canonical check.
+        assertEquals("the DIM light", TextCleaner.clean("the DIM light"))
+        // Canonical-but-common abbreviations are blocklisted.
+        assertEquals("a CD player", TextCleaner.clean("a CD player"))
+        assertEquals("Washington DC today", TextCleaner.clean("Washington DC today"))
+        assertEquals("the MIX tape", TextCleaner.clean("the MIX tape"))
     }
 
     @Test fun `cleanTitle converts standalone roman numerals`() {
