@@ -20,13 +20,52 @@ internal object Sentences {
     private const val SUB_CHUNK_TARGET = 45
 
     /**
+     * How long a sub-chunk may grow, as a function of how many chunks are already synthesised
+     * and waiting ahead of the playhead. Mid-sentence cutting sounds unnatural, so we only cut
+     * aggressively when there's no audio banked to cover the synth time:
+     *
+     *   depth 0 (cold start / starved): 70/45  — fast first audio, the 0.13 behaviour
+     *   depth 1:                        130/90 — most sentences stay whole
+     *   depth 2:                        220/160 — nearly everything whole
+     *   depth 3+:                       whole sentence (cap at MAX_CHUNK_CHARS)
+     *
+     * So the first sentence after a (re)start stays snappy and everything behind a healthy
+     * buffer is read as one natural utterance; clause/word cutting re-engages only if the engine
+     * falls behind. [threshold] is the length above which a sentence is sub-chunked at all;
+     * [target] is the preferred cut length when it is.
+     */
+    data class CutBudget(val threshold: Int, val target: Int)
+
+    fun budgetForDepth(depth: Int): CutBudget = when {
+        depth <= 0 -> CutBudget(SUB_CHUNK_THRESHOLD, SUB_CHUNK_TARGET)
+        depth == 1 -> CutBudget(130, 90)
+        depth == 2 -> CutBudget(220, 160)
+        else -> CutBudget(MAX_CHUNK_CHARS, MAX_CHUNK_CHARS)
+    }
+
+    /**
      * Consecutive short sentences within a paragraph get merged up to this length so dialogue
      * and tag (`"Why?" said Alice.`) read as one utterance rather than half a dozen choppy
      * synth calls with audible per-chunk transition gaps.
      */
     private const val MERGE_TARGET = 80
 
-    fun split(text: String, locale: Locale = Locale.US): List<String> {
+    /** Parse-time split: BreakIterator sentences, merged for dialogue flow AND sub-chunked at
+     *  the fixed default budget. Output is byte-for-byte what it was before the adaptive work. */
+    fun split(text: String, locale: Locale = Locale.US): List<String> =
+        mergeAndSubChunk(rawSentences(text, locale))
+
+    /**
+     * Merge-only split: the paragraph's natural sentence/utterance units (short sentences merged
+     * for dialogue flow) WITHOUT sub-chunking long ones. This is the position unit for
+     * buffer-adaptive playback — a long sentence stays a single position and is sub-chunked on
+     * demand at synth time via [subChunk] using the live [CutBudget].
+     */
+    fun splitSentences(text: String, locale: Locale = Locale.US): List<String> =
+        mergeOnly(rawSentences(text, locale))
+
+    /** BreakIterator sentence segmentation after [TextNormalize], no merging or sub-chunking. */
+    private fun rawSentences(text: String, locale: Locale): List<String> {
         if (text.isBlank()) return emptyList()
         // Repair run-together sentences and strip numeric grouping commas before the
         // BreakIterator sees the text. Shared with the PDF pipeline via TextNormalize.
@@ -42,20 +81,35 @@ internal object Sentences {
             start = end
             end = it.next()
         }
-        return mergeAndSubChunk(raw)
+        return raw
     }
 
+    /**
+     * Sub-chunk a single sentence for synthesis using the [CutBudget] for the current buffer
+     * depth. Returns the sentence whole when it fits the budget's threshold; otherwise carves it
+     * at clause / word boundaries near the budget's target — the same machinery as parse-time
+     * [split], just with a runtime-chosen budget instead of the fixed constants.
+     */
+    fun subChunk(sentence: String, budget: CutBudget): List<String> {
+        val s = sentence.trim()
+        if (s.isEmpty()) return emptyList()
+        return subChunkByClauses(s, budget.threshold, budget.target)
+    }
+
+    /** Parse-time path operating on RAW sentences: a sentence longer than SUB_CHUNK_THRESHOLD is
+     *  emitted as its own sub-chunked run; shorter ones are merged for dialogue flow. Identical
+     *  to the pre-adaptive behaviour — note it sub-chunks only individually-long sentences, never
+     *  a merged run of short ones (a merge can reach MERGE_TARGET without being cut). */
     private fun mergeAndSubChunk(sentences: List<String>): List<String> {
         val out = mutableListOf<String>()
         val acc = StringBuilder()
         for (sentence in sentences) {
             if (sentence.length > SUB_CHUNK_THRESHOLD) {
-                // Long sentence: emit any merge buffer and sub-chunk this one separately.
                 if (acc.isNotEmpty()) {
                     out.add(acc.toString())
                     acc.setLength(0)
                 }
-                out.addAll(subChunkByClauses(sentence))
+                out.addAll(subChunkByClauses(sentence, SUB_CHUNK_THRESHOLD, SUB_CHUNK_TARGET))
                 continue
             }
             val combined = acc.length + (if (acc.isEmpty()) 0 else 1) + sentence.length
@@ -74,14 +128,45 @@ internal object Sentences {
         return out
     }
 
-    /** Repeatedly carve [text] at the best available break until each piece fits. Prefers a
-     *  clause delimiter; failing that, a word boundary near the target; failing even that (a
-     *  single space-less mega-token), a hard character cut. */
-    private fun subChunkByClauses(text: String): List<String> {
+    /** Merges consecutive short sentences (dialogue + tag) up to MERGE_TARGET; a sentence longer
+     *  than MERGE_TARGET is emitted as its own element. No sub-chunking — the playback caller does
+     *  that on demand via [subChunk]. */
+    private fun mergeOnly(sentences: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        val acc = StringBuilder()
+        for (sentence in sentences) {
+            if (sentence.length > MERGE_TARGET) {
+                if (acc.isNotEmpty()) {
+                    out.add(acc.toString())
+                    acc.setLength(0)
+                }
+                out.add(sentence)
+                continue
+            }
+            val combined = acc.length + (if (acc.isEmpty()) 0 else 1) + sentence.length
+            if (combined <= MERGE_TARGET) {
+                if (acc.isNotEmpty()) acc.append(' ')
+                acc.append(sentence)
+            } else {
+                if (acc.isNotEmpty()) {
+                    out.add(acc.toString())
+                    acc.setLength(0)
+                }
+                acc.append(sentence)
+            }
+        }
+        if (acc.isNotEmpty()) out.add(acc.toString())
+        return out
+    }
+
+    /** Repeatedly carve [text] at the best available break until each piece fits [threshold].
+     *  Prefers a clause delimiter near [target]; failing that, a word boundary; failing even
+     *  that (a single space-less mega-token), a hard character cut. */
+    private fun subChunkByClauses(text: String, threshold: Int, target: Int): List<String> {
         val parts = mutableListOf<String>()
         var remaining = text
-        while (remaining.length > SUB_CHUNK_THRESHOLD) {
-            val cut = findClauseCut(remaining).takeIf { it > 0 } ?: findWordCut(remaining)
+        while (remaining.length > threshold) {
+            val cut = findClauseCut(remaining, target).takeIf { it > 0 } ?: findWordCut(remaining, target)
             if (cut <= 0) {
                 // No clause break AND no usable word boundary — a single space-less mega-token.
                 // Hard-cut at MAX_CHUNK_CHARS as the absolute last resort so we never ship a
@@ -112,8 +197,8 @@ internal object Sentences {
      * aside ("happening (an aside) and more") becomes its own chunk — break before " (" and
      * after ") ".
      */
-    private fun findClauseCut(text: String): Int {
-        val minCut = SUB_CHUNK_TARGET / 2
+    private fun findClauseCut(text: String, target: Int): Int {
+        val minCut = target / 2
         if (minCut >= text.length) return -1
 
         var bestCut = -1
@@ -123,7 +208,7 @@ internal object Sentences {
             while (idx >= 0) {
                 val cutPos = idx + delim.cutOffset
                 if (cutPos in minCut until text.length) {
-                    val cost = abs(cutPos - SUB_CHUNK_TARGET) * delim.weight
+                    val cost = abs(cutPos - target) * delim.weight
                     if (cost < bestCost) {
                         bestCost = cost
                         bestCut = cutPos
@@ -143,8 +228,8 @@ internal object Sentences {
      * a word mid-character. Returns -1 only when there is no usable space at all (a single
      * mega-token), leaving the caller to hard-cut at MAX_CHUNK_CHARS.
      */
-    private fun findWordCut(text: String): Int {
-        val minCut = SUB_CHUNK_TARGET / 2
+    private fun findWordCut(text: String, target: Int): Int {
+        val minCut = target / 2
         if (minCut >= text.length) return -1
         var bestCut = -1
         var bestDist = Int.MAX_VALUE
@@ -152,7 +237,7 @@ internal object Sentences {
         while (idx >= 0) {
             val cutPos = idx + 1  // cut after the space; the next chunk starts on a whole word
             if (cutPos in minCut until text.length) {
-                val dist = abs(cutPos - SUB_CHUNK_TARGET)
+                val dist = abs(cutPos - target)
                 if (dist < bestDist) {
                     bestDist = dist
                     bestCut = cutPos
