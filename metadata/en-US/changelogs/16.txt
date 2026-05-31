@@ -1,0 +1,7 @@
+Faster start when a long sentence has no commas.
+
+- A long sentence with no comma, dash or other natural break used
+  to be synthesised whole before any audio played, causing a few
+  seconds of silence at the start. It's now split at a word
+  boundary, so the voice begins almost immediately. Words are never
+  broken in the middle.

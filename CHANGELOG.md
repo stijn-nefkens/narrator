@@ -3,6 +3,21 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.13.0 — 2026-05-31
+
+First-audio latency fix for unpunctuated long sentences.
+
+- **Word-boundary fallback cut**: `subChunkByClauses` now tries, in
+  order, a clause delimiter → a word boundary near `SUB_CHUNK_TARGET`
+  → (only for a space-less mega-token) the `MAX_CHUNK_CHARS` hard cut.
+  Previously a long sentence with no comma/dash/bracket fell straight to
+  the hard cut, which (being 500 chars) left it whole — so it synthesised
+  in one ~7s pass before any audio (observed on the FP6 via FilePipeline
+  timing logs). It now splits at a word boundary, halving first-audio for
+  that case. `findWordCut` never breaks a word mid-character and returns
+  -1 only when there is genuinely no space, preserving the hard-cut path
+  for mega-tokens.
+
 ## 0.12.0 — 2026-05-31
 
 Cross-book switching speed + the deferred glued-word fix.

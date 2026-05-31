@@ -74,15 +74,18 @@ internal object Sentences {
         return out
     }
 
-    /** Repeatedly carve [text] at the best available clause break until each piece fits. */
+    /** Repeatedly carve [text] at the best available break until each piece fits. Prefers a
+     *  clause delimiter; failing that, a word boundary near the target; failing even that (a
+     *  single space-less mega-token), a hard character cut. */
     private fun subChunkByClauses(text: String): List<String> {
         val parts = mutableListOf<String>()
         var remaining = text
         while (remaining.length > SUB_CHUNK_THRESHOLD) {
-            val cut = findClauseCut(remaining)
+            val cut = findClauseCut(remaining).takeIf { it > 0 } ?: findWordCut(remaining)
             if (cut <= 0) {
-                // No clause break in reach — fall back to a hard cut at MAX_CHUNK_CHARS so we
-                // never ship a chunk so big it stalls the engine for many seconds.
+                // No clause break AND no usable word boundary — a single space-less mega-token.
+                // Hard-cut at MAX_CHUNK_CHARS as the absolute last resort so we never ship a
+                // chunk so big it stalls the engine for many seconds.
                 val hard = MAX_CHUNK_CHARS.coerceAtMost(remaining.length)
                 parts.add(remaining.substring(0, hard).trim())
                 remaining = remaining.substring(hard).trim()
@@ -128,6 +131,34 @@ internal object Sentences {
                 }
                 idx = text.indexOf(delim.token, idx + 1)
             }
+        }
+        return bestCut
+    }
+
+    /**
+     * Last-resort cut for a sentence with no clause-break delimiter in reach. Returns the word
+     * boundary (position just after a space) closest to SUB_CHUNK_TARGET, so an unpunctuated
+     * long sentence still yields a short first chunk — the engine begins audio in ~3s instead
+     * of synthesising the whole sentence first (~7s on the FP6 for a 90-char run). Never breaks
+     * a word mid-character. Returns -1 only when there is no usable space at all (a single
+     * mega-token), leaving the caller to hard-cut at MAX_CHUNK_CHARS.
+     */
+    private fun findWordCut(text: String): Int {
+        val minCut = SUB_CHUNK_TARGET / 2
+        if (minCut >= text.length) return -1
+        var bestCut = -1
+        var bestDist = Int.MAX_VALUE
+        var idx = text.indexOf(' ')
+        while (idx >= 0) {
+            val cutPos = idx + 1  // cut after the space; the next chunk starts on a whole word
+            if (cutPos in minCut until text.length) {
+                val dist = abs(cutPos - SUB_CHUNK_TARGET)
+                if (dist < bestDist) {
+                    bestDist = dist
+                    bestCut = cutPos
+                }
+            }
+            idx = text.indexOf(' ', idx + 1)
         }
         return bestCut
     }

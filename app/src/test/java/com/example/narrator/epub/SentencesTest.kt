@@ -69,11 +69,30 @@ class SentencesTest {
     }
 
     @Test
-    fun `sentence with no clause breaks falls back to hard split`() {
+    fun `single space-less mega-token falls back to hard split`() {
+        // No clause break AND no spaces — the only case left where the hard char cut applies.
         val long = "a".repeat(800) + "."
         val out = Sentences.split(long)
         assertTrue(out.size > 1)
         assertTrue(out.all { it.length <= Sentences.MAX_CHUNK_CHARS })
+    }
+
+    @Test
+    fun `unpunctuated long sentence is word-cut for fast first audio`() {
+        // ~90 chars, no clause-break punctuation anywhere — the shape that caused a ~7s
+        // first-audio stall on the FP6. Previously it stayed whole (findClauseCut returned -1
+        // and the hard cut at 500 left it intact); now it splits at a word boundary so the
+        // first chunk is short and synthesises fast.
+        val text = "the quick brown fox jumps over the lazy dog and then keeps running far " +
+            "across the wide open field"
+        val out = Sentences.split(text)
+        assertTrue("expected the unpunctuated sentence to be split, got: $out", out.size > 1)
+        // No word may be broken mid-character: rejoining the trimmed chunks with single spaces
+        // must reproduce the exact word sequence.
+        val words = text.split(Regex("\\s+"))
+        assertEquals(words, out.joinToString(" ").split(Regex("\\s+")))
+        // The first chunk should be shortened toward the target, not left at full length.
+        assertTrue("first chunk should be shortened, got ${out[0].length}", out[0].length < 70)
     }
 
     @Test
