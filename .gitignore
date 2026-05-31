@@ -49,5 +49,7 @@ hs_err_pid*
 _*.png
 _*.xml
 
-# Local end-to-end test PDF — never track
-Dutch-Political-System.pdf
+# --- Local end-to-end test books (developer-brought fixtures) — never track ---
+# PDFs anywhere, and the examples/ folder of sample books used for on-device testing.
+*.pdf
+/examples/
