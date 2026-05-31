@@ -48,3 +48,6 @@ hs_err_pid*
 # --- Ad-hoc debug captures (screenshots, UI dumps) ---
 _*.png
 _*.xml
+
+# Local end-to-end test PDF — never track
+Dutch-Political-System.pdf

@@ -264,7 +264,8 @@ object PdfParser {
             val withoutTables = stripTableRuns(withoutFootnotes)
             val cleaned = withoutTables.map { TextCleaner.clean(it.text) }
             val paragraphs = linesToParagraphs(cleaned).filterNot { looksLikeImageCaption(it) }
-            val chunks = paragraphs.flatMap { Sentences.split(it) }
+            // Emit whole sentence units; playback sub-chunks them adaptively by buffer depth.
+            val chunks = paragraphs.flatMap { Sentences.splitSentences(it) }
             if (chunks.isNotEmpty()) {
                 val cleanTitle = TextCleaner.cleanTitle(title)
                     .ifBlank { "Chapter ${index + 1}" }

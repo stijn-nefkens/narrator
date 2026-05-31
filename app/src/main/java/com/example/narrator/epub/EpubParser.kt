@@ -218,8 +218,11 @@ object EpubParser {
         }
     }
 
+    // Playback sub-chunks long sentences on demand (buffer-adaptive), so the parser emits whole
+    // sentence/utterance units rather than pre-cut chunks. splitSentences merges short dialogue
+    // but leaves long sentences intact.
     private fun paragraphsToChunks(paragraphs: List<String>, locale: Locale): List<String> =
-        paragraphs.flatMap { Sentences.split(it, locale) }
+        paragraphs.flatMap { Sentences.splitSentences(it, locale) }
 
     private fun decode(s: String): String = try {
         URLDecoder.decode(s, "UTF-8")

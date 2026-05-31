@@ -1,0 +1,9 @@
+More natural narration — fewer mid-sentence cuts.
+
+- Sentences are no longer chopped into short fixed-length pieces.
+  When there's enough audio buffered ahead, a whole sentence is read
+  as a single natural utterance, so the voice's intonation stays
+  intact. Cutting only kicks in for the very first sentence after you
+  press play (to start the audio quickly) or if the engine briefly
+  falls behind. Long sentences that used to sound choppy now read
+  smoothly.

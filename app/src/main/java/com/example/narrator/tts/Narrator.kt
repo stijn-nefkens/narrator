@@ -12,6 +12,7 @@ import com.example.narrator.data.BookRepository
 import com.example.narrator.data.SkipIncrement
 import com.example.narrator.epub.Book
 import com.example.narrator.epub.EpubParser
+import com.example.narrator.epub.Sentences
 import com.example.narrator.pdf.PdfParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -402,9 +403,10 @@ class Narrator(
         if (!ttsReady) return
         val s = _state.value
         val text = chunkTextAt(s.position) ?: return
-        pipeline?.startChunk(
-            text = text,
-            id = utteranceId(s.position),
+        // The head sentence is at the playhead (depth 0): cut for fast first audio.
+        pipeline?.startSentence(
+            subTexts = Sentences.subChunk(text, Sentences.budgetForDepth(0)),
+            positionId = utteranceId(s.position),
             chapterIndex = s.position.chapterIndex,
             autoplay = autoplay,
             isChapterTitle = isChapterTitlePosition(s.position),
@@ -517,7 +519,7 @@ class Narrator(
             // If the pipeline is already primed for this position (paused mid-chunk, or
             // pre-synthesised by loadBook), just unpause — we skip resynthesis and the audio
             // is ready to go immediately.
-            if (pipe != null && (pipe.canResumeCurrent(id) || pipe.hasQueueHead(id))) {
+            if (pipe != null && (pipe.canResumeCurrent(id) || pipe.hasQueuedSentence(id))) {
                 pipe.resume()
             } else {
                 primeFromCurrent(autoplay = true)
@@ -632,11 +634,16 @@ class Narrator(
     private fun queueAheadCount(from: Position, count: Int) {
         val loaded = _state.value.loaded ?: return
         var pos = from
-        repeat(count) {
+        repeat(count) { i ->
             val next = advanceChunk(loaded, pos, 1)
             if (next == pos) return
             val text = chunkTextAt(next) ?: return
-            pipeline?.queueNext(text, utteranceId(next), next.chapterIndex, isChapterTitlePosition(next))
+            // Distance from the head grows 1..count; deeper = more buffered = cut less.
+            val budget = Sentences.budgetForDepth(i + 1)
+            pipeline?.queueSentence(
+                Sentences.subChunk(text, budget),
+                utteranceId(next), next.chapterIndex, isChapterTitlePosition(next),
+            )
             pos = next
         }
     }
@@ -755,7 +762,11 @@ class Narrator(
         val tail = positionAhead(nextPos, PREFETCH_DEPTH)
         if (tail != null) {
             chunkTextAt(tail)?.let {
-                pipeline?.queueNext(it, utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail))
+                // Tail sits PREFETCH_DEPTH sentences ahead — a full buffer — so read it whole.
+                pipeline?.queueSentence(
+                    Sentences.subChunk(it, Sentences.budgetForDepth(PREFETCH_DEPTH)),
+                    utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail),
+                )
             }
         }
         persistBookmark()

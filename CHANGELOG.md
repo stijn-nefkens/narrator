@@ -3,6 +3,39 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.16.0 — 2026-05-31
+
+Buffer-adaptive sentence length — read whole sentences when buffered.
+
+Mid-sentence cutting flattens intonation and sounds unnatural. Cutting
+now scales inversely with how much audio is banked ahead of the playhead,
+so the engine reads whole sentences whenever it can and only cuts when
+there's latency pressure.
+
+- **Phase 1 — `Sentences` primitives** (commit b523645):
+  `CutBudget` + `budgetForDepth(depth)` (0→70/45, 1→130/90, 2→220/160,
+  3+→whole, capped at `MAX_CHUNK_CHARS`); `splitSentences()` (merge-only
+  position units); `subChunk(sentence, budget)` (on-demand). The
+  clause/word cut helpers are parameterised by threshold+target; the
+  parse-time `split()` (shared `rawSentences` source) is byte-identical,
+  guarded by the existing `SentencesTest`.
+- **Phase 2 — playback wiring**: the position unit is now a whole
+  sentence (EPUB/PDF parsers emit `splitSentences`). `Narrator`
+  sub-chunks each sentence at queue time by its distance from the
+  playhead — head (depth 0) cut for fast first audio, sentences deeper in
+  the buffer read whole. `FilePipeline` expands a sentence into 1..N
+  audio segments while keeping the MediaPlayer state machine intact:
+  `onChunkStarted` fires on the first segment, `onChunkCompleted` on the
+  last, so a sentence is exactly one Narrator position (bookmarks,
+  scrubbing, progress, chapter nav stay sentence-granular).
+- Verified on the FP6: head sentence arrives as small segments
+  (len 53/58, first audio ~0.1s), steady-state sentences synthesise and
+  play whole (len 212/147/212/99), inter-segment gaps 8–22ms (no stall),
+  positions advance once per sentence.
+- Note: existing resume bookmarks shift slightly (position unit went from
+  sub-chunk to sentence); they snap to the nearest sentence on next open.
+  `totalChunks` recomputes on load.
+
 ## 0.15.0 — 2026-05-31
 
 Natural pause after a spoken chapter title.

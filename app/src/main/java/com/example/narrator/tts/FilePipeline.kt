@@ -105,33 +105,66 @@ internal class FilePipeline(
     // --- public API ------------------------------------------------------
 
     /**
-     * Replace the queue with [text] as the new head chunk and start synthesising it. If
-     * [autoplay] is true, playback begins as soon as synthesis is done; if false, the chunk is
-     * synthesised and prepared but the MediaPlayer stays paused — useful for prefetching the
-     * resume position as soon as a book is loaded, before the user has pressed play.
+     * Replace the queue with one sentence (given as its already-cut [subTexts] segments) as the
+     * new head, and start synthesising. One Narrator position = one sentence = 1..N audio
+     * segments; the segments play back-to-back and Narrator is notified once (started on the
+     * first segment, completed on the last). If [autoplay] is false the segments are synthesised
+     * and prepared but the MediaPlayer stays paused (prefetch before the user presses play).
      */
-    fun startChunk(
-        text: String,
-        id: String,
+    fun startSentence(
+        subTexts: List<String>,
+        positionId: String,
         chapterIndex: Int,
         autoplay: Boolean = true,
         isChapterTitle: Boolean = false,
     ) {
         teardown()
         paused = !autoplay
-        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex, isChapterTitle = isChapterTitle)
-        queue.addLast(chunk)
-        synthesise(chunk)
+        enqueueSentence(subTexts, positionId, chapterIndex, isChapterTitle)
     }
 
-    /** True if the head of the queue is the chunk with this id (and so it's already primed). */
-    fun hasQueueHead(id: String): Boolean = queue.firstOrNull()?.id == id
+    /** True if a sentence with this position id is already queued (so it's primed). */
+    fun hasQueuedSentence(positionId: String): Boolean =
+        queue.any { it.positionId == positionId }
 
-    fun queueNext(text: String, id: String, chapterIndex: Int, isChapterTitle: Boolean = false) {
+    fun queueSentence(
+        subTexts: List<String>,
+        positionId: String,
+        chapterIndex: Int,
+        isChapterTitle: Boolean = false,
+    ) {
         if (queue.isEmpty()) return
-        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex, isChapterTitle = isChapterTitle)
-        queue.addLast(chunk)
-        synthesise(chunk)
+        enqueueSentence(subTexts, positionId, chapterIndex, isChapterTitle)
+    }
+
+    /** Expand a sentence into its segment PendingChunks and synthesise each. The first segment
+     *  carries the onChunkStarted notification, the last the onChunkCompleted + any post-title
+     *  pause; intermediate segments are silent to Narrator (same position). */
+    private fun enqueueSentence(
+        subTexts: List<String>,
+        positionId: String,
+        chapterIndex: Int,
+        isChapterTitle: Boolean,
+    ) {
+        val segments = subTexts.filter { it.isNotBlank() }
+        if (segments.isEmpty()) return
+        val last = segments.lastIndex
+        segments.forEachIndexed { i, text ->
+            val chunk = PendingChunk(
+                id = "$positionId#$i",
+                positionId = positionId,
+                text = text,
+                file = newFile(),
+                chapterIndex = chapterIndex,
+                isFirstSub = i == 0,
+                isLastSub = i == last,
+                // The post-title pause must follow the whole title sentence, so only the last
+                // segment carries the flag.
+                isChapterTitle = isChapterTitle && i == last,
+            )
+            queue.addLast(chunk)
+            synthesise(chunk)
+        }
     }
 
     fun pause() {
@@ -152,7 +185,7 @@ internal class FilePipeline(
                 applySpeed()
                 runCatching { mp.start() }
                 mpState = MpState.PLAYING
-                activeChunk?.let { onChunkStarted(it.id) }
+                activeChunk?.let { onChunkStarted(it.positionId) }
             }
             MpState.PREPARED -> startReadyMp()
             MpState.IDLE -> tryStartNextFromQueue()
@@ -186,8 +219,8 @@ internal class FilePipeline(
         }
     }
 
-    fun canResumeCurrent(id: String): Boolean =
-        (mpState == MpState.PAUSED) && (activeChunk?.id == id)
+    fun canResumeCurrent(positionId: String): Boolean =
+        (mpState == MpState.PAUSED) && (activeChunk?.positionId == positionId)
 
     /** Current playback position in ms, or 0 if no chunk is active. Safe to call any time. */
     fun currentPositionMs(): Int = if (mpState == MpState.PLAYING || mpState == MpState.PAUSED) {
@@ -251,10 +284,12 @@ internal class FilePipeline(
             onSynthCascadeFailure()
             return
         }
-        // Single-chunk failure: skip past the bad chunk so playback continues with the next.
+        // Single-segment failure: skip past the bad segment so playback continues with the next.
+        // Only notify Narrator if this was the sentence's last segment (a position boundary);
+        // a failed mid-sentence segment just drops that fragment of audio.
         queue.remove(chunk)
         runCatching { chunk.file.delete() }
-        onChunkCompleted(chunk.id)
+        if (chunk.isLastSub) onChunkCompleted(chunk.positionId)
         if (mpState == MpState.IDLE) tryStartNextFromQueue()
     }
 
@@ -301,12 +336,12 @@ internal class FilePipeline(
             mp.prepareAsync()
         } catch (e: Exception) {
             Log.w(TAG, "prepare_failed id=${chunk.id}", e)
-            // Treat as completion so the caller can advance past it.
+            // Treat as completion so the caller can advance past it (only at a position boundary).
             mpState = MpState.IDLE
             activeChunk = null
             runCatching { chunk.file.delete() }
             queue.removeFirstOrNull()
-            onChunkCompleted(chunk.id)
+            if (chunk.isLastSub) onChunkCompleted(chunk.positionId)
             tryStartNextFromQueue()
         }
     }
@@ -325,7 +360,9 @@ internal class FilePipeline(
         mpState = MpState.PLAYING
         activeChunk?.let {
             it.playStartAt = android.os.SystemClock.elapsedRealtime()
-            onChunkStarted(it.id)
+            // Notify the position only when its first segment begins; later segments of the same
+            // sentence keep the same position (Narrator shouldn't re-advance mid-sentence).
+            if (it.isFirstSub) onChunkStarted(it.positionId)
         }
     }
 
@@ -343,8 +380,9 @@ internal class FilePipeline(
             lastCompletedChapter = it.chapterIndex
             titlePause = it.isChapterTitle
             runCatching { it.file.delete() }
-            queue.removeFirstOrNull()  // the head was this chunk
-            onChunkCompleted(it.id)
+            queue.removeFirstOrNull()  // the head was this segment
+            // Advance the Narrator position only when a sentence's LAST segment finishes.
+            if (it.isLastSub) onChunkCompleted(it.positionId)
         }
         // A chapter title just finished: hold a short beat before the body so the heading reads
         // as its own line. The next chunk is in the same chapter (chunk 1), so the inter-chapter
@@ -394,10 +432,16 @@ internal class FilePipeline(
 
     private data class PendingChunk(
         val id: String,
+        /** Narrator position id (one sentence). Shared by all segments of that sentence. */
+        val positionId: String,
         val text: String,
         val file: File,
         val chapterIndex: Int = -1,
-        /** True if this chunk is a chapter heading; a short pause follows it before the body. */
+        /** First / last segment of the owning sentence. onChunkStarted fires on the first,
+         *  onChunkCompleted on the last; a single-segment sentence has both true. */
+        val isFirstSub: Boolean = true,
+        val isLastSub: Boolean = true,
+        /** True if this segment ends a chapter heading; a short pause follows it before the body. */
         val isChapterTitle: Boolean = false,
         var synthId: String? = null,
         var synthDone: Boolean = false,
