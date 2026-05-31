@@ -63,7 +63,10 @@ internal class FilePipeline(
     private var volume: Float = 1.0f
     /** Chapter of the most recently completed chunk; used to insert a pause at chapter boundaries. */
     private var lastCompletedChapter: Int = -1
-    private var pendingChapterStart: Runnable? = null
+    /** A scheduled, delayed start of the next chunk — used for both the inter-chapter pause (before
+     *  a new chapter's first chunk) and the post-title pause (after a chapter heading). Only one is
+     *  ever pending at a time; the two transitions never overlap. */
+    private var pendingDelayedStart: Runnable? = null
 
     /**
      * Cascading-failure guard: if the TTS engine is disabled / unbound / broken,
@@ -107,10 +110,16 @@ internal class FilePipeline(
      * synthesised and prepared but the MediaPlayer stays paused — useful for prefetching the
      * resume position as soon as a book is loaded, before the user has pressed play.
      */
-    fun startChunk(text: String, id: String, chapterIndex: Int, autoplay: Boolean = true) {
+    fun startChunk(
+        text: String,
+        id: String,
+        chapterIndex: Int,
+        autoplay: Boolean = true,
+        isChapterTitle: Boolean = false,
+    ) {
         teardown()
         paused = !autoplay
-        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex)
+        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex, isChapterTitle = isChapterTitle)
         queue.addLast(chunk)
         synthesise(chunk)
     }
@@ -118,18 +127,18 @@ internal class FilePipeline(
     /** True if the head of the queue is the chunk with this id (and so it's already primed). */
     fun hasQueueHead(id: String): Boolean = queue.firstOrNull()?.id == id
 
-    fun queueNext(text: String, id: String, chapterIndex: Int) {
+    fun queueNext(text: String, id: String, chapterIndex: Int, isChapterTitle: Boolean = false) {
         if (queue.isEmpty()) return
-        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex)
+        val chunk = PendingChunk(id, text, newFile(), chapterIndex = chapterIndex, isChapterTitle = isChapterTitle)
         queue.addLast(chunk)
         synthesise(chunk)
     }
 
     fun pause() {
         paused = true
-        // Hold off any deferred chapter start until the user resumes.
-        pendingChapterStart?.let { handler.removeCallbacks(it) }
-        pendingChapterStart = null
+        // Hold off any deferred start (chapter / post-title pause) until the user resumes.
+        pendingDelayedStart?.let { handler.removeCallbacks(it) }
+        pendingDelayedStart = null
         if (mpState == MpState.PLAYING) {
             runCatching { mp.pause() }
             mpState = MpState.PAUSED
@@ -254,7 +263,7 @@ internal class FilePipeline(
     private fun tryStartNextFromQueue() {
         if (paused) return
         if (mpState != MpState.IDLE) return
-        if (pendingChapterStart != null) return  // chapter pause already scheduled
+        if (pendingDelayedStart != null) return  // a delayed start is already scheduled
         val next = queue.firstOrNull() ?: return
         if (!next.synthDone) return  // wait for synth_done
 
@@ -264,17 +273,23 @@ internal class FilePipeline(
             next.chapterIndex != lastCompletedChapter
         if (crossingChapter) {
             lastCompletedChapter = -1  // consume; subsequent retries won't re-pause
-            val r = Runnable {
-                pendingChapterStart = null
-                if (!paused && mpState == MpState.IDLE && queue.firstOrNull() === next) {
-                    beginPrepare(next)
-                }
-            }
-            pendingChapterStart = r
-            handler.postDelayed(r, CHAPTER_PAUSE_MS)
+            scheduleDelayedStart(next, CHAPTER_PAUSE_MS)
             return
         }
         beginPrepare(next)
+    }
+
+    /** Posts a delayed start of [next], holding the MP idle for [delayMs] (a chapter boundary or
+     *  post-title beat). Re-checks state when it fires so a pause/skip in the meantime wins. */
+    private fun scheduleDelayedStart(next: PendingChunk, delayMs: Long) {
+        val r = Runnable {
+            pendingDelayedStart = null
+            if (!paused && mpState == MpState.IDLE && queue.firstOrNull() === next) {
+                beginPrepare(next)
+            }
+        }
+        pendingDelayedStart = r
+        handler.postDelayed(r, delayMs)
     }
 
     private fun beginPrepare(chunk: PendingChunk) {
@@ -319,15 +334,25 @@ internal class FilePipeline(
         if (mpState == MpState.IDLE) return  // already torn down
         mpState = MpState.IDLE
         activeChunk = null
+        var titlePause = false
         completed?.let {
             val now = android.os.SystemClock.elapsedRealtime()
             val playMs = if (it.playStartAt > 0) now - it.playStartAt else -1
             Log.d(TAG, "TIMING play  id=${it.id} text_len=${it.text.length} " +
                 "play_ms=$playMs synth_ms=${it.synthEndAt - it.synthStartAt}")
             lastCompletedChapter = it.chapterIndex
+            titlePause = it.isChapterTitle
             runCatching { it.file.delete() }
             queue.removeFirstOrNull()  // the head was this chunk
             onChunkCompleted(it.id)
+        }
+        // A chapter title just finished: hold a short beat before the body so the heading reads
+        // as its own line. The next chunk is in the same chapter (chunk 1), so the inter-chapter
+        // pause in tryStartNextFromQueue won't also fire.
+        val next = queue.firstOrNull()
+        if (titlePause && next != null && next.synthDone && !paused && pendingDelayedStart == null) {
+            scheduleDelayedStart(next, TITLE_PAUSE_MS)
+            return
         }
         tryStartNextFromQueue()
     }
@@ -350,8 +375,8 @@ internal class FilePipeline(
         // a ~1-minute freeze after a handful of next-chapter taps.
         runCatching { tts.stop() }
         runCatching { mp.reset() }
-        pendingChapterStart?.let { handler.removeCallbacks(it) }
-        pendingChapterStart = null
+        pendingDelayedStart?.let { handler.removeCallbacks(it) }
+        pendingDelayedStart = null
         // After a skip/seek/teardown, the next start() is the user's action — no pause.
         lastCompletedChapter = -1
         mpState = MpState.IDLE
@@ -372,6 +397,8 @@ internal class FilePipeline(
         val text: String,
         val file: File,
         val chapterIndex: Int = -1,
+        /** True if this chunk is a chapter heading; a short pause follows it before the body. */
+        val isChapterTitle: Boolean = false,
         var synthId: String? = null,
         var synthDone: Boolean = false,
         var synthStartAt: Long = 0L,
@@ -391,6 +418,8 @@ internal class FilePipeline(
         private const val TAG = "FilePipeline"
         /** Natural pause inserted between the last chunk of one chapter and the first of the next. */
         private const val CHAPTER_PAUSE_MS = 1500L
+        /** Shorter beat after a chapter heading, before the chapter body begins. */
+        private const val TITLE_PAUSE_MS = 900L
         // Trailing characters sherpa-onnx renders as audible artifacts (a "ktsh" or "snort"
         // sound after the last word). Include single AND double quote variants, plus their
         // curly / guillemet relatives. Apostrophes mid-word are unaffected — trimEnd only

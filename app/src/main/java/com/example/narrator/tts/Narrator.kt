@@ -407,8 +407,25 @@ class Narrator(
             id = utteranceId(s.position),
             chapterIndex = s.position.chapterIndex,
             autoplay = autoplay,
+            isChapterTitle = isChapterTitlePosition(s.position),
         )
         queueAheadCount(from = s.position, count = PREFETCH_DEPTH)
+    }
+
+    /**
+     * True if [pos] is a chapter's spoken heading — the short first chunk whose text matches the
+     * chapter title — so the pipeline inserts a brief pause after it before the body. Guarded so
+     * it never fires after an ordinary short opening sentence: must be chunk 0, the chapter must
+     * have a body chunk after it, the chunk must be short, and its text must look like the title.
+     */
+    private fun isChapterTitlePosition(pos: Position): Boolean {
+        if (pos.chunkIndex != 0) return false
+        val loaded = _state.value.loaded ?: return false
+        if ((loaded.chapterChunkCounts.getOrNull(pos.chapterIndex) ?: 0) < 2) return false
+        val text = chunkTextAt(pos) ?: return false
+        if (text.length > TITLE_MAX_CHARS) return false
+        val title = loaded.chapterTitles.getOrNull(pos.chapterIndex) ?: return false
+        return titleLike(text, title)
     }
 
     fun setSpeed(speed: Float) {
@@ -619,7 +636,7 @@ class Narrator(
             val next = advanceChunk(loaded, pos, 1)
             if (next == pos) return
             val text = chunkTextAt(next) ?: return
-            pipeline?.queueNext(text, utteranceId(next), next.chapterIndex)
+            pipeline?.queueNext(text, utteranceId(next), next.chapterIndex, isChapterTitlePosition(next))
             pos = next
         }
     }
@@ -636,13 +653,30 @@ class Narrator(
         return pos
     }
 
-    private companion object {
+    internal companion object {
         // Deeper than strictly needed for gapless playback: with the shorter chunks from the
         // 0.11 sentence-cutting change, each synth is faster, so keeping more ready ahead of
         // the playhead smooths transitions and absorbs the occasional slow chunk.
         const val PREFETCH_DEPTH = 4
         /** Number of recently-read, non-finished books whose parse is kept warm in memory. */
         const val MAX_PARSE_CACHE = 5
+        /** A chapter's first chunk is treated as its spoken heading only if it's at most this
+         *  long — guards the post-title pause against firing after a long opening sentence. */
+        const val TITLE_MAX_CHARS = 80
+
+        /** True if [chunk] reads like the chapter [title] — exact match after normalisation, or
+         *  one contained in the other (the in-body heading and the TOC title often differ in
+         *  punctuation / a "Chapter N" prefix). Pure + static so it's unit-testable. */
+        @androidx.annotation.VisibleForTesting
+        internal fun titleLike(chunk: String, title: String): Boolean {
+            val a = normalizeForTitle(chunk)
+            val b = normalizeForTitle(title)
+            if (a.isEmpty() || b.isEmpty()) return false
+            return a == b || a.contains(b) || b.contains(a)
+        }
+
+        private fun normalizeForTitle(s: String): String =
+            s.lowercase(Locale.US).replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
         /** Length of the gentle volume ramp at the end of a sleep timer. */
         const val SLEEP_FADE_MS = 15_000L
         /** Volume MediaPlayer is set to while another app is ducking us (notification etc.). */
@@ -720,7 +754,9 @@ class Narrator(
         updateCurrentTexts()
         val tail = positionAhead(nextPos, PREFETCH_DEPTH)
         if (tail != null) {
-            chunkTextAt(tail)?.let { pipeline?.queueNext(it, utteranceId(tail), tail.chapterIndex) }
+            chunkTextAt(tail)?.let {
+                pipeline?.queueNext(it, utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail))
+            }
         }
         persistBookmark()
     }
