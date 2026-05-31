@@ -99,6 +99,35 @@ class SentencesTest {
     }
 
     @Test
+    fun `mid-sentence parenthetical starts its own chunk when the sentence is long`() {
+        val text = "Something important was happening (the cause was unclear) and it " +
+            "affected a great many things in the surrounding area."
+        val out = Sentences.split(text)
+        assertTrue("expected the long sentence to be sub-chunked, got: $out", out.size > 1)
+        assertTrue(
+            "expected a chunk to begin at the opening parenthesis, got: $out",
+            out.any { it.startsWith("(") },
+        )
+    }
+
+    @Test
+    fun `strips numeric grouping commas so the engine reads the whole number`() {
+        val out = Sentences.split("We raised 200,000 dollars for the cause.")
+        assertEquals(1, out.size)
+        assertTrue("expected grouping comma stripped, got: ${out[0]}", out[0].contains("200000"))
+    }
+
+    @Test
+    fun `ordinary comma-laden sentence over the threshold is sub-chunked`() {
+        // ~118 chars with commas: under the old 100 threshold this stayed whole; now it splits
+        // so the engine can keep up in real time.
+        val text = "Alice opened the door, stepped into the corridor, paused for a moment, " +
+            "and looked around at the strange and silent place."
+        val out = Sentences.split(text)
+        assertTrue("expected sub-chunking of a long comma-laden sentence, got: $out", out.size > 1)
+    }
+
+    @Test
     fun `sub-chunker finds break past 150 char window`() {
         // Regression for 0.9.2: previously the search was capped at SUB_CHUNK_THRESHOLD * 1.5
         // (= 150 chars). A long sentence whose first clause break sits past that point was

@@ -146,9 +146,10 @@ class PlayerFragment : Fragment() {
                 .show()
             container.narrator.clearEngineError()
         }
+        binding.playerLoading.visibility = if (state.loading) View.VISIBLE else View.GONE
         val loaded = state.loaded
         if (loaded == null) {
-            binding.playerEmpty.visibility = View.VISIBLE
+            binding.playerEmpty.visibility = if (state.loading) View.GONE else View.VISIBLE
             binding.playerLoaded.visibility = View.GONE
             highlightHandler.removeCallbacks(highlightTick)
             return

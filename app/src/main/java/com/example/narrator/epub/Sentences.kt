@@ -9,13 +9,15 @@ internal object Sentences {
     const val MAX_CHUNK_CHARS = 500
 
     /**
-     * Sentences longer than this are sub-chunked at clause boundaries (em-dash, semicolon,
-     * colon, comma). Neural TTS engines like Kokoro spend O(n²)-ish synth time on long inputs,
-     * so a single 370-char "sentence" can take ~10s of synth before any audio plays. Sub-chunking
-     * lets the first ~100 chars start synthesising on its own and audio begins almost immediately.
+     * Sentences longer than this are sub-chunked at clause boundaries (em-dash, brackets,
+     * semicolon, colon, comma). Neural TTS engines like Kokoro spend O(n²)-ish synth time on
+     * long inputs, so a single 370-char "sentence" can take ~10s of synth before any audio
+     * plays. Sub-chunking lets the first clause start synthesising on its own and audio begins
+     * almost immediately. The threshold/target were lowered from 100/70 to bias toward shorter
+     * chunks the engine can keep up with in real time.
      */
-    private const val SUB_CHUNK_THRESHOLD = 100
-    private const val SUB_CHUNK_TARGET = 70
+    private const val SUB_CHUNK_THRESHOLD = 70
+    private const val SUB_CHUNK_TARGET = 45
 
     /**
      * Consecutive short sentences within a paragraph get merged up to this length so dialogue
@@ -24,20 +26,11 @@ internal object Sentences {
      */
     private const val MERGE_TARGET = 80
 
-    /**
-     * When sentence-terminating punctuation sits between a lowercase letter and an upper+
-     * lowercase pair, source text occasionally drops the separating space ("scale.Quite",
-     * "abroad.As"). PDFBox does this regularly; EPUB content can do it when paragraphs are
-     * joined across element boundaries. Without that space BreakIterator can't see the
-     * sentence end, the whole paragraph fuses into one mega-sentence, and the fallback
-     * MAX_CHUNK_CHARS cut chops a word in half. Lookbehind/lookahead guard against
-     * acronyms ("U.S.", "i.e.") and all-caps runs ("U.S.A.").
-     */
-    private val missingSentenceSpace = Regex("(?<=[a-z])([.!?])(?=[A-Z][a-z])")
-
     fun split(text: String, locale: Locale = Locale.US): List<String> {
         if (text.isBlank()) return emptyList()
-        val repaired = missingSentenceSpace.replace(text, "$1 ")
+        // Repair run-together sentences and strip numeric grouping commas before the
+        // BreakIterator sees the text. Shared with the PDF pipeline via TextNormalize.
+        val repaired = TextNormalize.normalize(text)
         val it = BreakIterator.getSentenceInstance(locale)
         it.setText(repaired)
         val raw = mutableListOf<String>()
@@ -110,10 +103,11 @@ internal object Sentences {
      * so em-dashes are preferred per unit of distance but a much closer comma still wins
      * over a far-away dash.
      *
-     * Previously the search was capped at SUB_CHUNK_THRESHOLD * 1.5 (= 150 chars), which
-     * meant any sentence whose first clause break landed past that was hard-cut at
-     * MAX_CHUNK_CHARS — splitting words mid-character. Removing the cap lets the search
-     * find the best break across the whole sentence.
+     * The search spans the whole sentence (no upper cap), so a long sentence whose first
+     * clause break sits far in still breaks at the break rather than the MAX_CHUNK_CHARS
+     * hard cut. Most delimiters cut *after* the token; parentheses cut so a mid-sentence
+     * aside ("happening (an aside) and more") becomes its own chunk — break before " (" and
+     * after ") ".
      */
     private fun findClauseCut(text: String): Int {
         val minCut = SUB_CHUNK_TARGET / 2
@@ -121,30 +115,39 @@ internal object Sentences {
 
         var bestCut = -1
         var bestCost = Double.MAX_VALUE
-        for ((delim, weight) in DELIMITERS) {
-            var idx = text.indexOf(delim)
+        for (delim in DELIMITERS) {
+            var idx = text.indexOf(delim.token)
             while (idx >= 0) {
-                val cutPos = idx + delim.length
+                val cutPos = idx + delim.cutOffset
                 if (cutPos in minCut until text.length) {
-                    val cost = abs(cutPos - SUB_CHUNK_TARGET) * weight
+                    val cost = abs(cutPos - SUB_CHUNK_TARGET) * delim.weight
                     if (cost < bestCost) {
                         bestCost = cost
                         bestCut = cutPos
                     }
                 }
-                idx = text.indexOf(delim, idx + 1)
+                idx = text.indexOf(delim.token, idx + 1)
             }
         }
         return bestCut
     }
 
-    // Lower weight = more natural break point (preferred per unit of distance from target).
-    private val DELIMITERS: List<Pair<String, Double>> = listOf(
-        "—" to 0.5,
-        "–" to 0.5,
-        "--" to 0.5,
-        ";" to 1.0,
-        ":" to 1.0,
-        "," to 1.5,
+    /**
+     * A clause delimiter. [cutOffset] is added to the token's start index to get the cut
+     * position, so a token can break either after itself (e.g. ";" → offset 1) or before its
+     * trailing content (" (" → offset 1 cuts at the space, leaving "(" to start the next
+     * chunk). Lower [weight] = more natural break point per unit of distance from target.
+     */
+    private data class Delim(val token: String, val weight: Double, val cutOffset: Int)
+
+    private val DELIMITERS: List<Delim> = listOf(
+        Delim("—", 0.5, 1),
+        Delim("–", 0.5, 1),
+        Delim("--", 0.5, 2),
+        Delim(") ", 0.8, 2),   // close of a parenthetical: end the clause after it
+        Delim(" (", 0.8, 1),   // open of a parenthetical: end the clause before it
+        Delim(";", 1.0, 1),
+        Delim(":", 1.0, 1),
+        Delim(",", 1.5, 1),
     )
 }

@@ -213,4 +213,12 @@
                 tools:text="So she was considering, in her own mind." />
         </LinearLayout>
     </ScrollView>
+
+    <!-- Loading spinner shown while a book is being parsed (large PDFs take a few seconds). -->
+    <ProgressBar
+        android:id="@+id/player_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
 </FrameLayout>

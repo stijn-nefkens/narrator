@@ -49,6 +49,9 @@ data class NarratorState(
      *  this as a Snackbar pointing at Voice setup. Set back to null on the next successful
      *  prime/play. */
     val engineError: String? = null,
+    /** True while a book is being parsed/loaded. The Player shows a spinner so opening a large
+     *  book (especially a PDF) doesn't look frozen. */
+    val loading: Boolean = false,
 )
 
 sealed class SleepTimer {
@@ -207,11 +210,15 @@ class Narrator(
         preferences.lastOpenedBookId = bookId
         val bookmark = repository.getBookmark(bookId)
 
+        // Surface a spinner immediately — PDF parsing of a large book can take a few seconds,
+        // and without feedback the tap into the Player looks like nothing happened.
+        _state.value = _state.value.copy(loading = true)
         val parsed: Book = try {
             withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
         } catch (e: Exception) {
             android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
             // Leave state unchanged so the player keeps whatever was previously loaded.
+            _state.value = _state.value.copy(loading = false)
             return
         }
         chunksByChapter = parsed.chapters.map { it.chunks }
@@ -569,7 +576,10 @@ class Narrator(
     }
 
     private companion object {
-        const val PREFETCH_DEPTH = 2
+        // Deeper than strictly needed for gapless playback: with the shorter chunks from the
+        // 0.11 sentence-cutting change, each synth is faster, so keeping more ready ahead of
+        // the playhead smooths transitions and absorbs the occasional slow chunk.
+        const val PREFETCH_DEPTH = 4
         /** Length of the gentle volume ramp at the end of a sleep timer. */
         const val SLEEP_FADE_MS = 15_000L
         /** Volume MediaPlayer is set to while another app is ducking us (notification etc.). */

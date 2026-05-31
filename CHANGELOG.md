@@ -3,6 +3,33 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.11.0 — 2026-05-31
+
+Narration smoothness + text-cleanup pass, driven by real-world testing.
+
+- **Loading indicator**: `NarratorState.loading` is set while a book is
+  parsed; `PlayerFragment` shows a centered spinner. Opening a large PDF
+  no longer looks like a dead tap.
+- **Shorter sentence cutting**: `SUB_CHUNK_THRESHOLD` 100→70 and
+  `SUB_CHUNK_TARGET` 70→45 so chunks the engine can synthesise in real
+  time. `PREFETCH_DEPTH` 2→4 to keep more audio ready ahead of the
+  playhead and absorb the occasional slow chunk.
+- **Bracket-aware clause cutting**: `findClauseCut` now supports
+  cut-before / cut-after delimiters. A long sentence with a mid-sentence
+  parenthetical ("happening (an aside) and more") breaks around the
+  brackets instead of mid-clause.
+- **Numeric grouping commas stripped**: "200,000" → "200000" so the TTS
+  reads it as one number. Guarded so list commas, enumerations and
+  European decimals are untouched.
+- **Broader glued-sentence repair**: the missing-space-after-period
+  heuristic now also fires after digits ("1990.The") and preserves a
+  closing quote on the left of the inserted space ("done.\"Then" →
+  "done.\" Then").
+- **Refactor**: shared `epub.TextNormalize` holds the dot-glue +
+  number-comma transforms, called from both `Sentences.split` (covers
+  EPUB and PDF) and `pdf.TextCleaner` (per-line). Removes the regex that
+  was duplicated across the two files. Fully unit-tested.
+
 ## 0.10.1 — 2026-05-25
 
 Stabilization pass. No user-visible behavior changes.

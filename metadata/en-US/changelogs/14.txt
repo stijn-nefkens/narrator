@@ -1,0 +1,12 @@
+Smoother narration and cleaner text.
+
+- Loading spinner when opening a book, so a large PDF no longer
+  looks frozen while it parses.
+- Numbers like "200,000" are now read as a single number instead
+  of being mangled by the grouping commas.
+- Sentences are cut shorter and more of them are buffered ahead,
+  so the voice keeps up in real time and transitions are smoother.
+- Sentences with a parenthetical aside in the middle now break
+  cleanly around the brackets when they're long.
+- Better detection of sentences glued together by a missing space
+  after a period — including after numbers and quotes.
