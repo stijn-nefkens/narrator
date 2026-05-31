@@ -110,45 +110,22 @@ class BookRepository(
         refresh()
     }
 
-    suspend fun updateTotalChunks(bookId: Long, total: Int) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply { put(NarratorDatabase.COL_TOTAL_CHUNKS, total) }
-        writeDb().update(
-            NarratorDatabase.TABLE_BOOKS, values,
-            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
-        )
-        refresh()
-    }
+    suspend fun updateTotalChunks(bookId: Long, total: Int) =
+        updateBookColumns(bookId) { put(NarratorDatabase.COL_TOTAL_CHUNKS, total) }
 
-    suspend fun updatePlaybackSpeed(bookId: Long, speed: Float) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply { put(NarratorDatabase.COL_PLAYBACK_SPEED, speed) }
-        writeDb().update(
-            NarratorDatabase.TABLE_BOOKS, values,
-            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
-        )
-    }
+    // Speed changes are high-frequency (every drag step) and don't affect the library list,
+    // so this is the one column update that deliberately skips the StateFlow refresh().
+    suspend fun updatePlaybackSpeed(bookId: Long, speed: Float) =
+        updateBookColumns(bookId, refresh = false) { put(NarratorDatabase.COL_PLAYBACK_SPEED, speed) }
 
-    suspend fun updateBookDetails(bookId: Long, title: String, author: String) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply {
+    suspend fun updateBookDetails(bookId: Long, title: String, author: String) =
+        updateBookColumns(bookId) {
             put(NarratorDatabase.COL_TITLE, title)
             put(NarratorDatabase.COL_AUTHOR, author)
         }
-        writeDb().update(
-            NarratorDatabase.TABLE_BOOKS, values,
-            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
-        )
-        refresh()
-    }
 
-    suspend fun setFinished(bookId: Long, finished: Boolean) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply {
-            put(NarratorDatabase.COL_IS_FINISHED, if (finished) 1 else 0)
-        }
-        writeDb().update(
-            NarratorDatabase.TABLE_BOOKS, values,
-            "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
-        )
-        refresh()
-    }
+    suspend fun setFinished(bookId: Long, finished: Boolean) =
+        updateBookColumns(bookId) { put(NarratorDatabase.COL_IS_FINISHED, if (finished) 1 else 0) }
 
     /** Drops the resume bookmark for a book so it starts from the beginning next load.
      *  Named bookmarks (saved_bookmarks) are kept — the user might still want them. */
@@ -162,15 +139,22 @@ class BookRepository(
 
     /** Updates the per-book skip-pattern regex list. Newline-separated; empty string
      *  disables skip-pattern filtering for the book. */
-    suspend fun updateSkipPatterns(bookId: Long, patterns: String) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply {
-            put(NarratorDatabase.COL_SKIP_PATTERNS, patterns)
-        }
+    suspend fun updateSkipPatterns(bookId: Long, patterns: String) =
+        updateBookColumns(bookId) { put(NarratorDatabase.COL_SKIP_PATTERNS, patterns) }
+
+    /** Applies a set of column updates to a single book row by id, then optionally refreshes
+     *  the observable book list. Centralises the WHERE clause + refresh that every single-row
+     *  book update shares. */
+    private suspend fun updateBookColumns(
+        bookId: Long,
+        refresh: Boolean = true,
+        values: ContentValues.() -> Unit,
+    ) = withContext(Dispatchers.IO) {
         writeDb().update(
-            NarratorDatabase.TABLE_BOOKS, values,
+            NarratorDatabase.TABLE_BOOKS, ContentValues().apply(values),
             "${NarratorDatabase.COL_ID} = ?", arrayOf(bookId.toString()),
         )
-        refresh()
+        if (refresh) refresh()
     }
 
     // --- Saved bookmarks (named positions) ---
