@@ -226,7 +226,12 @@ class PlayerFragment : Fragment() {
 
     private fun refreshHighlight() {
         val state = container.narrator.state.value
-        val text = state.currentText
+        // Show the segment currently being spoken (a sentence may be synthesised in several
+        // segments); the highlight char-range / playback position refer to that same segment, so
+        // text + highlight + audio stay in sync. Falls back to the whole sentence when nothing is
+        // actively playing (e.g. paused before first play).
+        val text = container.narrator.currentSpokenSegment()?.takeIf { it.isNotBlank() }
+            ?: state.currentText
         if (text.isEmpty()) {
             binding.playerCurrentText.text = ""
             return

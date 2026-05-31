@@ -455,6 +455,15 @@ class Narrator(
     fun playbackDurationMs(): Int = pipeline?.currentDurationMs() ?: 0
 
     /**
+     * Text of the segment currently being spoken — one piece of the current sentence when the
+     * sentence was sub-chunked for synthesis (cold start / after a skip), or the whole sentence
+     * when it plays as one segment. The follow-along caption shows this so the highlight tracks
+     * the actual audio. Null when nothing is playing; the UI falls back to the whole-sentence
+     * [NarratorState.currentText] then (e.g. paused before first play).
+     */
+    fun currentSpokenSegment(): String? = pipeline?.activeSegmentText()
+
+    /**
      * Returns the char index up-to-and-including which the current chunk is being spoken,
      * derived from the engine's onRangeStart events. -1 if the engine didn't emit any events
      * for this chunk (caller should fall back to a time-based estimate).

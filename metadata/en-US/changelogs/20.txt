@@ -1,0 +1,8 @@
+Fix: follow-along text now matches the audio.
+
+- After 0.16.0 a sentence can be spoken in several segments (e.g.
+  right after skipping back). The caption used to show the whole
+  sentence while only one segment was being read, so the highlight
+  restarted on the same text and ran ahead of the voice. The caption
+  now shows the segment actually being spoken, so text, highlight and
+  audio stay in step.

@@ -68,6 +68,13 @@ internal class FilePipeline(
      *  ever pending at a time; the two transitions never overlap. */
     private var pendingDelayedStart: Runnable? = null
 
+    /** Text of the segment currently bound to the MediaPlayer. A sentence may be synthesised as
+     *  several segments; the follow-along caption shows THIS (the spoken segment) rather than the
+     *  whole sentence, so the highlight tracks the actual audio instead of restarting over the
+     *  full sentence once per segment. Persisted across the brief inter-segment MP-reset gap so
+     *  the caption doesn't flicker back to the whole sentence; cleared on teardown. */
+    private var currentSegmentText: String? = null
+
     /**
      * Cascading-failure guard: if the TTS engine is disabled / unbound / broken,
      * synthesizeToFile returns ERROR for every call. Previously we treated each as a
@@ -360,6 +367,8 @@ internal class FilePipeline(
         mpState = MpState.PLAYING
         activeChunk?.let {
             it.playStartAt = android.os.SystemClock.elapsedRealtime()
+            // Caption follows the segment being spoken (see currentSegmentText).
+            currentSegmentText = it.text
             // Notify the position only when its first segment begins; later segments of the same
             // sentence keep the same position (Narrator shouldn't re-advance mid-sentence).
             if (it.isFirstSub) onChunkStarted(it.positionId)
@@ -419,6 +428,7 @@ internal class FilePipeline(
         lastCompletedChapter = -1
         mpState = MpState.IDLE
         activeChunk = null
+        currentSegmentText = null
         for (chunk in queue) {
             runCatching { chunk.file.delete() }
         }
@@ -451,6 +461,10 @@ internal class FilePipeline(
         val rangeEvents: MutableList<RangeEvent> = mutableListOf(),
         var sampleRate: Int = 24000,
     )
+
+    /** Text of the segment currently being spoken (one piece of the current sentence), for the
+     *  follow-along caption. Null before playback / after teardown. */
+    fun activeSegmentText(): String? = currentSegmentText
 
     /** Range events for the chunk currently bound to the MediaPlayer, or empty if engine doesn't emit them. */
     fun activeChunkRangeEvents(): List<RangeEvent> = activeChunk?.rangeEvents?.toList().orEmpty()

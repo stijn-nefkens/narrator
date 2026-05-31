@@ -3,6 +3,22 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.16.1 — 2026-05-31
+
+Fix: follow-along caption out of sync with audio after 0.16.0.
+
+- With buffer-adaptive length a sentence may be synthesised as several
+  segments (cold start / after skipping back), but the caption still
+  showed the whole sentence — so the word highlight, which maps the
+  current segment's MediaPlayer progress onto the displayed text,
+  restarted over the full sentence once per segment and outran the voice.
+- `FilePipeline` now exposes `activeSegmentText()` (the segment bound to
+  the MediaPlayer, held across the inter-segment reset gap);
+  `Narrator.currentSpokenSegment()` surfaces it; `PlayerFragment`
+  displays it for the highlight, falling back to the whole sentence
+  (`currentText`) only when nothing is playing (e.g. paused before first
+  play). Text, highlight, and audio now refer to the same segment.
+
 ## 0.16.0 — 2026-05-31
 
 Buffer-adaptive sentence length — read whole sentences when buffered.
