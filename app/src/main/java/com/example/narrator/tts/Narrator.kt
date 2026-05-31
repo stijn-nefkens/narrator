@@ -405,7 +405,7 @@ class Narrator(
         val text = chunkTextAt(s.position) ?: return
         // The head sentence is at the playhead (depth 0): cut for fast first audio.
         pipeline?.startSentence(
-            subTexts = Sentences.subChunk(text, Sentences.budgetForDepth(0)),
+            segments = segmentsFor(text, Sentences.budgetForDepth(0)),
             positionId = utteranceId(s.position),
             chapterIndex = s.position.chapterIndex,
             autoplay = autoplay,
@@ -413,6 +413,11 @@ class Narrator(
         )
         queueAheadCount(from = s.position, count = PREFETCH_DEPTH)
     }
+
+    /** Sub-chunk [text] at [budget] and adapt the result to the pipeline's segment type, carrying
+     *  each segment's offset within the sentence for the follow-along highlight. */
+    private fun segmentsFor(text: String, budget: Sentences.CutBudget): List<FilePipeline.SubSegment> =
+        Sentences.subChunkWithOffsets(text, budget).map { FilePipeline.SubSegment(it.text, it.offset) }
 
     /**
      * True if [pos] is a chapter's spoken heading — the short first chunk whose text matches the
@@ -454,30 +459,57 @@ class Narrator(
     /** Current chunk's MediaPlayer total duration, in ms. 0 if not yet known. */
     fun playbackDurationMs(): Int = pipeline?.currentDurationMs() ?: 0
 
-    /**
-     * Text of the segment currently being spoken — one piece of the current sentence when the
-     * sentence was sub-chunked for synthesis (cold start / after a skip), or the whole sentence
-     * when it plays as one segment. The follow-along caption shows this so the highlight tracks
-     * the actual audio. Null when nothing is playing; the UI falls back to the whole-sentence
-     * [NarratorState.currentText] then (e.g. paused before first play).
-     */
-    fun currentSpokenSegment(): String? = pipeline?.activeSegmentText()
+    /** Monotonic highlight floor for the current sentence: the furthest char reached so far. The
+     *  highlight never moves backward within a sentence — without this it snaps back to the start
+     *  of a finished segment during the synth gap before the next segment plays. Reset to 0 on
+     *  every position change (updateCurrentTexts). */
+    private var highlightFloorChars = 0
 
     /**
-     * Returns the char index up-to-and-including which the current chunk is being spoken,
-     * derived from the engine's onRangeStart events. -1 if the engine didn't emit any events
-     * for this chunk (caller should fall back to a time-based estimate).
+     * Char index up-to-and-including which the CURRENT SENTENCE is being spoken, for the
+     * follow-along highlight over the whole-sentence caption ([NarratorState.currentText]).
+     *
+     * The caption is always the whole sentence; the audio, though, may be one of several
+     * synthesis segments. So the raw position = the current segment's start offset within the
+     * sentence + how far we are through that segment (engine onRangeStart char ranges when exact,
+     * else MediaPlayer position ÷ duration scaled by the segment's char length — sherpa-onnx on
+     * the FP6 emits no ranges).
+     *
+     * Two guards keep it from jittering backward:
+     *  - Position match: if the bound segment belongs to a different sentence than the one on
+     *    screen (the brief gap between sentences), don't apply its coordinates — hold the floor.
+     *  - Monotonic floor: never return less than the furthest char already reached this sentence,
+     *    so the inter-segment synth gap (MediaPlayer idle, position 0) can't snap the highlight
+     *    back to the start of the segment that just finished.
+     *
+     * Returns -1 only when nothing is playing AND nothing has been highlighted yet.
      */
     fun currentSpokenCharEnd(): Int {
         val pipe = pipeline ?: return -1
-        val events = pipe.activeChunkRangeEvents()
-        if (events.isEmpty()) return -1
-        val sampleRate = pipe.activeChunkSampleRate()
-        if (sampleRate <= 0) return -1
-        val positionMs = pipe.currentPositionMs()
-        // Convert MP playback position (ms) → audio frame, then find the last event before it.
-        val currentFrame = (positionMs.toLong() * sampleRate / 1000L).toInt()
-        return events.lastOrNull { it.frame <= currentFrame }?.charEnd ?: 0
+        val segLen = pipe.activeSegmentLength()
+        val activePos = pipe.activeSegmentPositionId()
+        val curId = utteranceId(_state.value.position)
+
+        // Bound segment is from another sentence (or none) — hold whatever we've highlighted.
+        if (segLen <= 0 || activePos != curId) {
+            return if (highlightFloorChars > 0) highlightFloorChars else -1
+        }
+
+        val offset = pipe.activeSegmentOffset()
+        val withinSegment = run {
+            val events = pipe.activeChunkRangeEvents()
+            val sampleRate = pipe.activeChunkSampleRate()
+            if (events.isNotEmpty() && sampleRate > 0) {
+                val frame = (pipe.currentPositionMs().toLong() * sampleRate / 1000L).toInt()
+                events.lastOrNull { it.frame <= frame }?.charEnd ?: 0
+            } else {
+                val pos = pipe.currentPositionMs()
+                val dur = pipe.currentDurationMs()
+                if (dur > 0 && pos > 0) (pos.toFloat() / dur * segLen).toInt() else 0
+            }
+        }.coerceIn(0, segLen)
+        highlightFloorChars = maxOf(highlightFloorChars, offset + withinSegment)
+        return highlightFloorChars
     }
 
     fun seekToGlobalChunk(globalChunk: Int) {
@@ -650,7 +682,7 @@ class Narrator(
             // Distance from the head grows 1..count; deeper = more buffered = cut less.
             val budget = Sentences.budgetForDepth(i + 1)
             pipeline?.queueSentence(
-                Sentences.subChunk(text, budget),
+                segmentsFor(text, budget),
                 utteranceId(next), next.chapterIndex, isChapterTitlePosition(next),
             )
             pos = next
@@ -730,6 +762,8 @@ class Narrator(
         val current = chunkTextAt(s.position).orEmpty()
         val nextPos = advanceChunk(loaded, s.position, 1)
         val next = if (nextPos != s.position) chunkTextAt(nextPos).orEmpty() else ""
+        // New sentence on screen → restart the monotonic highlight floor.
+        highlightFloorChars = 0
         _state.value = s.copy(currentText = current, nextText = next, currentChunkStartedAt = 0L)
     }
 
@@ -773,7 +807,7 @@ class Narrator(
             chunkTextAt(tail)?.let {
                 // Tail sits PREFETCH_DEPTH sentences ahead — a full buffer — so read it whole.
                 pipeline?.queueSentence(
-                    Sentences.subChunk(it, Sentences.budgetForDepth(PREFETCH_DEPTH)),
+                    segmentsFor(it, Sentences.budgetForDepth(PREFETCH_DEPTH)),
                     utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail),
                 )
             }

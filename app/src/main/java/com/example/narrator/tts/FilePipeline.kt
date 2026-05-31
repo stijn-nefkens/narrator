@@ -68,12 +68,19 @@ internal class FilePipeline(
      *  ever pending at a time; the two transitions never overlap. */
     private var pendingDelayedStart: Runnable? = null
 
-    /** Text of the segment currently bound to the MediaPlayer. A sentence may be synthesised as
-     *  several segments; the follow-along caption shows THIS (the spoken segment) rather than the
-     *  whole sentence, so the highlight tracks the actual audio instead of restarting over the
-     *  full sentence once per segment. Persisted across the brief inter-segment MP-reset gap so
-     *  the caption doesn't flicker back to the whole sentence; cleared on teardown. */
+    /** The segment currently bound to the MediaPlayer. A sentence may be synthesised as several
+     *  segments; the caption always shows the WHOLE sentence (stable, no chopping flicker) while
+     *  the highlight is positioned at [currentSegmentOffset] + progress-within-this-segment, so it
+     *  flows continuously across the displayed sentence regardless of how many pieces the synth
+     *  cut it into. Held across the brief inter-segment MP-reset gap; cleared on teardown. */
     private var currentSegmentText: String? = null
+    /** Char offset of [currentSegmentText] within its whole sentence (0 for a single-segment
+     *  sentence, or the start index of this piece for a multi-segment one). */
+    private var currentSegmentOffset: Int = 0
+    /** Position id (sentence) the current segment belongs to. The caption highlighter uses this
+     *  to ignore stale segment coordinates during the gap between sentences (when the caption has
+     *  already advanced but the next sentence's audio hasn't started). */
+    private var currentSegmentPositionId: String? = null
 
     /**
      * Cascading-failure guard: if the TTS engine is disabled / unbound / broken,
@@ -118,8 +125,12 @@ internal class FilePipeline(
      * first segment, completed on the last). If [autoplay] is false the segments are synthesised
      * and prepared but the MediaPlayer stays paused (prefetch before the user presses play).
      */
+    /** One synthesis segment of a sentence: its [text] and the char [offset] at which that text
+     *  begins within the whole sentence (so the caption highlight can be positioned absolutely). */
+    data class SubSegment(val text: String, val offset: Int)
+
     fun startSentence(
-        subTexts: List<String>,
+        segments: List<SubSegment>,
         positionId: String,
         chapterIndex: Int,
         autoplay: Boolean = true,
@@ -127,7 +138,7 @@ internal class FilePipeline(
     ) {
         teardown()
         paused = !autoplay
-        enqueueSentence(subTexts, positionId, chapterIndex, isChapterTitle)
+        enqueueSentence(segments, positionId, chapterIndex, isChapterTitle)
     }
 
     /** True if a sentence with this position id is already queued (so it's primed). */
@@ -135,32 +146,33 @@ internal class FilePipeline(
         queue.any { it.positionId == positionId }
 
     fun queueSentence(
-        subTexts: List<String>,
+        segments: List<SubSegment>,
         positionId: String,
         chapterIndex: Int,
         isChapterTitle: Boolean = false,
     ) {
         if (queue.isEmpty()) return
-        enqueueSentence(subTexts, positionId, chapterIndex, isChapterTitle)
+        enqueueSentence(segments, positionId, chapterIndex, isChapterTitle)
     }
 
     /** Expand a sentence into its segment PendingChunks and synthesise each. The first segment
      *  carries the onChunkStarted notification, the last the onChunkCompleted + any post-title
      *  pause; intermediate segments are silent to Narrator (same position). */
     private fun enqueueSentence(
-        subTexts: List<String>,
+        segments: List<SubSegment>,
         positionId: String,
         chapterIndex: Int,
         isChapterTitle: Boolean,
     ) {
-        val segments = subTexts.filter { it.isNotBlank() }
-        if (segments.isEmpty()) return
-        val last = segments.lastIndex
-        segments.forEachIndexed { i, text ->
+        val segs = segments.filter { it.text.isNotBlank() }
+        if (segs.isEmpty()) return
+        val last = segs.lastIndex
+        segs.forEachIndexed { i, seg ->
             val chunk = PendingChunk(
                 id = "$positionId#$i",
                 positionId = positionId,
-                text = text,
+                text = seg.text,
+                segmentOffset = seg.offset,
                 file = newFile(),
                 chapterIndex = chapterIndex,
                 isFirstSub = i == 0,
@@ -367,8 +379,11 @@ internal class FilePipeline(
         mpState = MpState.PLAYING
         activeChunk?.let {
             it.playStartAt = android.os.SystemClock.elapsedRealtime()
-            // Caption follows the segment being spoken (see currentSegmentText).
+            // Track the spoken segment + its offset so the highlight maps to the right span of
+            // the whole-sentence caption (see currentSegmentOffset).
             currentSegmentText = it.text
+            currentSegmentOffset = it.segmentOffset
+            currentSegmentPositionId = it.positionId
             // Notify the position only when its first segment begins; later segments of the same
             // sentence keep the same position (Narrator shouldn't re-advance mid-sentence).
             if (it.isFirstSub) onChunkStarted(it.positionId)
@@ -429,6 +444,8 @@ internal class FilePipeline(
         mpState = MpState.IDLE
         activeChunk = null
         currentSegmentText = null
+        currentSegmentOffset = 0
+        currentSegmentPositionId = null
         for (chunk in queue) {
             runCatching { chunk.file.delete() }
         }
@@ -445,6 +462,8 @@ internal class FilePipeline(
         /** Narrator position id (one sentence). Shared by all segments of that sentence. */
         val positionId: String,
         val text: String,
+        /** Char offset of [text] within the whole sentence (0 for a single-segment sentence). */
+        val segmentOffset: Int = 0,
         val file: File,
         val chapterIndex: Int = -1,
         /** First / last segment of the owning sentence. onChunkStarted fires on the first,
@@ -462,9 +481,15 @@ internal class FilePipeline(
         var sampleRate: Int = 24000,
     )
 
-    /** Text of the segment currently being spoken (one piece of the current sentence), for the
-     *  follow-along caption. Null before playback / after teardown. */
-    fun activeSegmentText(): String? = currentSegmentText
+    /** Length (chars) of the segment currently being spoken; 0 before playback / after teardown.
+     *  Used to scale the time-based highlight estimate within the segment's span. */
+    fun activeSegmentLength(): Int = currentSegmentText?.length ?: 0
+
+    /** Char offset of the current segment within its whole sentence; 0 if none active. */
+    fun activeSegmentOffset(): Int = currentSegmentOffset
+
+    /** Position id (sentence) the current segment belongs to, or null if none is bound. */
+    fun activeSegmentPositionId(): String? = currentSegmentPositionId
 
     /** Range events for the chunk currently bound to the MediaPlayer, or empty if engine doesn't emit them. */
     fun activeChunkRangeEvents(): List<RangeEvent> = activeChunk?.rangeEvents?.toList().orEmpty()

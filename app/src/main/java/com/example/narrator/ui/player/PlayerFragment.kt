@@ -226,28 +226,17 @@ class PlayerFragment : Fragment() {
 
     private fun refreshHighlight() {
         val state = container.narrator.state.value
-        // Show the segment currently being spoken (a sentence may be synthesised in several
-        // segments); the highlight char-range / playback position refer to that same segment, so
-        // text + highlight + audio stay in sync. Falls back to the whole sentence when nothing is
-        // actively playing (e.g. paused before first play).
-        val text = container.narrator.currentSpokenSegment()?.takeIf { it.isNotBlank() }
-            ?: state.currentText
+        // The caption is ALWAYS the whole sentence — stable, no chopping flicker even when the
+        // sentence is synthesised in several segments. The highlight end is sentence-absolute
+        // (Narrator adds the current segment's offset to its within-segment progress), so it flows
+        // continuously across the displayed sentence and tracks the voice.
+        val text = state.currentText
         if (text.isEmpty()) {
             binding.playerCurrentText.text = ""
             return
         }
-        // Prefer the engine's exact char range when available (onRangeStart events). Otherwise
-        // fall back to mapping MediaPlayer's playback position onto the text length.
-        val exact = container.narrator.currentSpokenCharEnd()
-        val charsSpoken = if (exact >= 0) {
-            exact.coerceIn(0, text.length)
-        } else {
-            val position = container.narrator.playbackPositionMs()
-            val duration = container.narrator.playbackDurationMs()
-            if (duration > 0 && position > 0) {
-                (position.toFloat() / duration * text.length).toInt().coerceIn(0, text.length)
-            } else 0
-        }
+        val charEnd = container.narrator.currentSpokenCharEnd()
+        val charsSpoken = if (charEnd >= 0) charEnd.coerceIn(0, text.length) else 0
         // Snap to word boundary so highlight grows word-by-word.
         val highlightEnd = snapToWordEnd(text, charsSpoken)
         if (highlightEnd <= 0) {

@@ -3,6 +3,44 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.16.2 — 2026-05-31
+
+Caption shows the whole sentence; highlight is segment-offset-aware.
+
+0.16.1 fixed the highlight desync by making the caption follow the spoken
+*segment* — but that leaked the synthesis chopping to the reader: while a
+skipped-to sentence synthesised, the caption showed the whole sentence,
+then snapped to a short first segment when audio started. This makes
+segmentation invisible: the caption is always the whole sentence (stable),
+and the highlight is positioned absolutely within it.
+
+- `Sentences.subChunkWithOffsets` returns each segment with its char
+  offset in the sentence (reconstructed by a whitespace-skipping walk —
+  exact, no duplicate-word ambiguity a plain `indexOf` would hit).
+- `FilePipeline` carries `segmentOffset` per segment and exposes
+  `activeSegmentOffset()` / `activeSegmentLength()`.
+- `Narrator.currentSpokenCharEnd()` is now sentence-absolute:
+  `segmentOffset + within-segment progress` (engine char-ranges when
+  present, else MediaPlayer position ÷ duration × segment length — the
+  FP6's sherpa emits no ranges, so the time fallback is the live path).
+- `PlayerFragment` always displays `currentText` (whole sentence) and
+  highlights up to the absolute char end. Subsumes the 0.16.1 per-segment
+  caption (removed) without the chopping side-effect.
+- Highlight anti-jitter (fixes "highlight jumps back when pausing to
+  synthesise", worst after skipping since a skipped-to sentence is cut
+  most aggressively): two guards in `currentSpokenCharEnd` —
+  (a) **position match**: ignore the bound segment's coordinates when it
+  belongs to a different sentence than the one on screen (the gap between
+  sentences); (b) **monotonic floor** (`highlightFloorChars`, reset per
+  sentence in `updateCurrentTexts`): never move the highlight backward
+  within a sentence, so the inter-segment synth gap — MediaPlayer idle at
+  position 0 — can't snap it back to the start of the segment that just
+  finished.
+
+Tests: SentencesAdaptiveTest gains offset coverage (segments locatable,
+offsets monotonic, whole-sentence offset 0); suite 94, 0 failures; Lint
+green.
+
 ## 0.16.1 — 2026-05-31
 
 Fix: follow-along caption out of sync with audio after 0.16.0.

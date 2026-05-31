@@ -1,0 +1,7 @@
+Smoother follow-along text.
+
+- The follow-along caption now always shows the whole sentence and
+  stays stable, with the highlight flowing across it — even when the
+  sentence is synthesised in several pieces after skipping. No more
+  seeing a long sentence while it loads and then a short fragment
+  when it starts.

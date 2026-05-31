@@ -96,6 +96,36 @@ internal object Sentences {
         return subChunkByClauses(s, budget.threshold, budget.target)
     }
 
+    /** A synthesis segment of a sentence with the char [offset] at which its [text] begins within
+     *  that sentence. Lets the player highlight the right span of the whole-sentence caption. */
+    data class OffsetSegment(val text: String, val offset: Int)
+
+    /**
+     * Like [subChunk] but also reports each segment's offset within [sentence], so the caption can
+     * stay the whole sentence while the highlight maps onto the segment being spoken.
+     *
+     * [subChunkByClauses] cuts the trimmed sentence into consecutive substrings and trims each, so
+     * the pieces are contiguous in the sentence separated only by the whitespace the cutter
+     * stripped at each boundary. We reconstruct exact offsets by walking the sentence, skipping
+     * inter-piece whitespace before each piece — exact and unambiguous (a plain `indexOf` could
+     * match a duplicate word earlier in the sentence). Defensive `coerceAtMost` keeps it in bounds
+     * if a piece ever fails to line up rather than throwing.
+     */
+    fun subChunkWithOffsets(sentence: String, budget: CutBudget): List<OffsetSegment> {
+        val s = sentence.trim()
+        if (s.isEmpty()) return emptyList()
+        val pieces = subChunkByClauses(s, budget.threshold, budget.target)
+        val out = ArrayList<OffsetSegment>(pieces.size)
+        var cursor = 0
+        for (piece in pieces) {
+            while (cursor < s.length && s[cursor].isWhitespace()) cursor++
+            val offset = cursor.coerceAtMost(s.length)
+            out.add(OffsetSegment(piece, offset))
+            cursor = offset + piece.length
+        }
+        return out
+    }
+
     /** Parse-time path operating on RAW sentences: a sentence longer than SUB_CHUNK_THRESHOLD is
      *  emitted as its own sub-chunked run; shorter ones are merged for dialogue flow. Identical
      *  to the pre-adaptive behaviour — note it sub-chunks only individually-long sentences, never

@@ -65,6 +65,32 @@ class SentencesAdaptiveTest {
         assertEquals(emptyList<String>(), Sentences.subChunk("   ", Sentences.budgetForDepth(0)))
     }
 
+    // --- subChunkWithOffsets ---------------------------------------------
+
+    @Test fun `offset segments cover the sentence in order with locatable offsets`() {
+        val segs = Sentences.subChunkWithOffsets(longSentence, Sentences.budgetForDepth(0))
+        assertTrue("expected multiple segments at cold start, got: $segs", segs.size > 1)
+        val trimmed = longSentence.trim()
+        var prev = -1
+        for (seg in segs) {
+            // Each segment's text appears in the sentence at its reported offset.
+            assertEquals(
+                "segment '${seg.text}' not at offset ${seg.offset}",
+                seg.text, trimmed.substring(seg.offset, seg.offset + seg.text.length),
+            )
+            // Offsets are strictly increasing (monotonic, non-overlapping start points).
+            assertTrue("offsets must increase: $prev -> ${seg.offset}", seg.offset > prev)
+            prev = seg.offset
+        }
+    }
+
+    @Test fun `whole-sentence segment has offset zero`() {
+        val segs = Sentences.subChunkWithOffsets(longSentence, Sentences.budgetForDepth(3))
+        assertEquals(1, segs.size)
+        assertEquals(0, segs[0].offset)
+        assertEquals(longSentence, segs[0].text)
+    }
+
     // --- splitSentences keeps long sentences as single units --------------
 
     @Test fun `splitSentences keeps a long sentence as one unit`() {
