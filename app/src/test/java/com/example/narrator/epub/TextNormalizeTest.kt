@@ -49,10 +49,36 @@ class TextNormalizeTest {
         assertEquals("3,14", TextNormalize.stripGroupingCommas("3,14"))
     }
 
-    @Test fun `normalize applies both transforms`() {
+    // --- splitGluedWords -------------------------------------------------
+
+    @Test fun `splits words glued at a camelCase boundary`() {
+        assertEquals("happening Then", TextNormalize.splitGluedWords("happeningThen"))
+        assertEquals("the day The next", TextNormalize.splitGluedWords("the dayThe next"))
+    }
+
+    @Test fun `does not split single-lowercase brand or name forms`() {
+        // Only one lowercase letter before the internal capital — left intact.
+        assertEquals("iPhone", TextNormalize.splitGluedWords("iPhone"))
+        assertEquals("eBook", TextNormalize.splitGluedWords("eBook"))
+        assertEquals("McDonald", TextNormalize.splitGluedWords("McDonald"))
+        assertEquals("DeForest", TextNormalize.splitGluedWords("DeForest"))
+        assertEquals("LaSalle", TextNormalize.splitGluedWords("LaSalle"))
+    }
+
+    @Test fun `does not split the Mac name prefix`() {
+        assertEquals("MacArthur", TextNormalize.splitGluedWords("MacArthur"))
+        assertEquals("General MacArthur won", TextNormalize.splitGluedWords("General MacArthur won"))
+    }
+
+    @Test fun `does not break acronym runs`() {
+        // No uppercase-then-lowercase second word, and no two lowercase before the boundary.
+        assertEquals("USData", TextNormalize.splitGluedWords("USData"))
+    }
+
+    @Test fun `normalize chains number, dot-glue and glued-word fixes`() {
         assertEquals(
-            "We raised 200000. Then we stopped.",
-            TextNormalize.normalize("We raised 200,000.Then we stopped."),
+            "We raised 200000. Then morning Came.",
+            TextNormalize.normalize("We raised 200,000.Then morningCame."),
         )
     }
 }

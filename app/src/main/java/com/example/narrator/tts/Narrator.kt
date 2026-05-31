@@ -7,6 +7,7 @@ import android.media.AudioManager
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import com.example.narrator.data.AppPreferences
+import com.example.narrator.data.BookEntity
 import com.example.narrator.data.BookRepository
 import com.example.narrator.data.SkipIncrement
 import com.example.narrator.epub.Book
@@ -78,6 +79,19 @@ class Narrator(
     private var pendingPlay = false
     private var chunksByChapter: List<List<String>> = emptyList()
     private var pipeline: FilePipeline? = null
+
+    /**
+     * LRU cache of parsed books, keyed by bookId. Re-opening a recently-read book skips the
+     * (multi-second, for large PDFs) parse entirely, so the switch is near-instant. Entries are
+     * invalidated by [cacheSignature], so a skip-pattern edit, page-range change, or file
+     * replacement re-parses. Finished books are never cached (the user has moved on). All access
+     * is on the main thread — both loadBook and warmRecentBooks write the map on Main.
+     */
+    private data class CachedParse(val signature: String, val book: Book)
+    private val parseCache = object : LinkedHashMap<Long, CachedParse>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedParse>): Boolean =
+            size > MAX_PARSE_CACHE
+    }
 
     // Running totals used to estimate remaining time. Reset on book load.
     private var statsCompletedMs: Long = 0L
@@ -210,16 +224,25 @@ class Narrator(
         preferences.lastOpenedBookId = bookId
         val bookmark = repository.getBookmark(bookId)
 
-        // Surface a spinner immediately — PDF parsing of a large book can take a few seconds,
-        // and without feedback the tap into the Player looks like nothing happened.
-        _state.value = _state.value.copy(loading = true)
-        val parsed: Book = try {
-            withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
-        } catch (e: Exception) {
-            android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
-            // Leave state unchanged so the player keeps whatever was previously loaded.
-            _state.value = _state.value.copy(loading = false)
-            return
+        val signature = cacheSignature(book)
+        val cached = parseCache[bookId]?.takeIf { it.signature == signature }?.book
+        val parsed: Book = if (cached != null) {
+            // Cache hit — no parse, no spinner. The switch is instant.
+            cached
+        } else {
+            // Surface a spinner immediately — PDF parsing of a large book can take a few
+            // seconds, and without feedback the tap into the Player looks like nothing happened.
+            _state.value = _state.value.copy(loading = true)
+            val p = try {
+                withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
+            } catch (e: Exception) {
+                android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
+                // Leave state unchanged so the player keeps whatever was previously loaded.
+                _state.value = _state.value.copy(loading = false)
+                return
+            }
+            cachePut(bookId, signature, p, book.isFinished)
+            p
         }
         chunksByChapter = parsed.chapters.map { it.chunks }
         val total = chunksByChapter.sumOf { it.size }
@@ -258,6 +281,44 @@ class Narrator(
         // Start prefetching as soon as the book is loaded so the first chunk is already
         // synthesised by the time the user presses play.
         primeFromCurrent(autoplay = false)
+    }
+
+    private fun cacheSignature(book: BookEntity): String =
+        "${book.epubPath}|${book.pageRangeStart}|${book.pageRangeEnd}|${book.skipPatterns}"
+
+    private fun cachePut(bookId: Long, signature: String, book: Book, finished: Boolean) {
+        if (finished) {
+            parseCache.remove(bookId)
+            return
+        }
+        // Drop cover bytes before caching — the Player loads the cover from disk via coverPath,
+        // so the parsed Book's coverImage is dead weight that would bloat the cache.
+        parseCache[bookId] = CachedParse(signature, book.copy(coverImage = null, coverMimeType = null))
+    }
+
+    /**
+     * Pre-parse the most recently-played, not-yet-finished books into [parseCache] so switching
+     * to one of them opens instantly. Runs in the background and never touches the TTS engine,
+     * so it can't disturb live playback — it only fills the parse cache. Parsing is sequential
+     * to stay gentle on a phone that may be mid-playback. Call after the repository has been
+     * refreshed (e.g. app startup).
+     */
+    fun warmRecentBooks() {
+        scope.launch {
+            val recent = repository.books.value
+                .filterNot { it.book.isFinished }
+                .sortedByDescending { it.bookmark?.updatedAt ?: 0L }
+                .take(MAX_PARSE_CACHE)
+            for (bwp in recent) {
+                val book = bwp.book
+                val signature = cacheSignature(book)
+                if (parseCache[book.id]?.signature == signature) continue  // already warm
+                val parsed = withContext(Dispatchers.IO) {
+                    runCatching { parseBookFile(File(book.epubPath), book) }.getOrNull()
+                } ?: continue
+                cachePut(book.id, signature, parsed, book.isFinished)
+            }
+        }
     }
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
@@ -580,6 +641,8 @@ class Narrator(
         // 0.11 sentence-cutting change, each synth is faster, so keeping more ready ahead of
         // the playhead smooths transitions and absorbs the occasional slow chunk.
         const val PREFETCH_DEPTH = 4
+        /** Number of recently-read, non-finished books whose parse is kept warm in memory. */
+        const val MAX_PARSE_CACHE = 5
         /** Length of the gentle volume ramp at the end of a sleep timer. */
         const val SLEEP_FADE_MS = 15_000L
         /** Volume MediaPlayer is set to while another app is ducking us (notification etc.). */

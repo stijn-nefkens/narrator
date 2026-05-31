@@ -32,6 +32,8 @@ class NarratorApp : Application() {
             if (lastId > 0 && container.bookRepository.getBook(lastId) != null) {
                 runCatching { container.narrator.loadBook(lastId) }
             }
+            // Pre-parse other recent books in the background so switching to one is instant.
+            container.narrator.warmRecentBooks()
         }
     }
 

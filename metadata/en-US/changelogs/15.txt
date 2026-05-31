@@ -1,0 +1,9 @@
+Faster book switching and one more text fix.
+
+- Switching between recently-read books is now near-instant: the
+  app keeps the parsed text of your last few unfinished books ready
+  in the background, so re-opening one skips the loading wait.
+- Words accidentally glued together (e.g. "morningCame" from PDF
+  text extraction) are now split so the voice pronounces both
+  words. Brand and surname forms like iPhone, McDonald and
+  MacArthur are deliberately left intact.

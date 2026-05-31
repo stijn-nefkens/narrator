@@ -35,12 +35,39 @@ internal object TextNormalize {
      */
     private val groupingComma = Regex("(?<=\\d),(?=\\d{3}(?:,\\d{3})*(?!\\d))")
 
+    /**
+     * Words glued together at a camelCase boundary ("happeningThen", "dayThe") — a common PDF
+     * extraction artifact where a word break (often a lost sentence boundary) collapses into no
+     * space at all. Inserting a space lets the engine pronounce both words instead of one
+     * mangled token.
+     *
+     * This is the false-positive-prone transform, so the guards are deliberate:
+     *   - `(?<=[a-z]{2})` requires at least two lowercase letters before the boundary. This
+     *     spares single-lowercase-after-capital brand/name forms — "iPhone", "eBook",
+     *     "DeForest", "McDonald", "LaSalle", "DiCaprio" all have only one lowercase letter
+     *     before the internal capital and so are left intact.
+     *   - `(?<!Mac)` spares the one common name prefix with two trailing lowercase letters
+     *     ("MacArthur", "MacBeth") that the rule above would otherwise split.
+     *   - `(?=[A-Z][a-z])` requires the second word to start uppercase-then-lowercase, which
+     *     avoids breaking acronym runs ("USData" stays whole).
+     *
+     * Brand compounds like "JavaScript" / "PowerPoint" are still split ("Java Script"), but
+     * when spoken aloud the audio is essentially identical, so the tradeoff is inaudible — the
+     * cases that would actually mispronounce (proper-name prefixes) are the ones guarded above.
+     * Digit↔letter boundaries ("3D", "mp3", "1st") are intentionally NOT touched: too many
+     * legitimate forms, real risk of audible damage.
+     */
+    private val gluedWords = Regex("(?<!Mac)(?<=[a-z]{2})(?=[A-Z][a-z])")
+
     fun restoreSentenceSpaces(s: String): String =
         if (s.length < 4) s else missingSentenceSpace.replace(s, "$1$2 ")
 
     fun stripGroupingCommas(s: String): String =
         if (!s.contains(',')) s else groupingComma.replace(s, "")
 
+    fun splitGluedWords(s: String): String = gluedWords.replace(s, " ")
+
     /** Master entry applied by [Sentences.split] before sentence breaking. */
-    fun normalize(s: String): String = stripGroupingCommas(restoreSentenceSpaces(s))
+    fun normalize(s: String): String =
+        splitGluedWords(stripGroupingCommas(restoreSentenceSpaces(s)))
 }

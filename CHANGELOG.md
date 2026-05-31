@@ -3,6 +3,27 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.12.0 — 2026-05-31
+
+Cross-book switching speed + the deferred glued-word fix.
+
+- **Cross-book parse cache**: `Narrator` holds an LRU cache (max 5) of
+  parsed books keyed by `bookId`, invalidated by a signature over
+  `epubPath` + page range + skip patterns. Re-opening a recent book is a
+  cache hit — no re-parse, no spinner. Finished books are never cached;
+  cover bytes are dropped before caching (the Player reads the cover from
+  disk). `warmRecentBooks()` pre-parses the most-recently-played
+  non-finished books in the background at startup, never touching the TTS
+  engine so it can't disturb playback.
+- **Glued-word splitting**: `TextNormalize.splitGluedWords` breaks
+  camelCase run-together words ("morningCame" → "morning Came"), a common
+  PDF extraction artifact. Guarded against proper-name / brand mangling:
+  requires two lowercase letters before the boundary (spares iPhone,
+  eBook, McDonald, DeForest, LaSalle), an explicit `Mac` guard (spares
+  MacArthur), and uppercase-then-lowercase after (spares acronym runs).
+  Digit↔letter boundaries are intentionally left alone. Now part of
+  `TextNormalize.normalize`, so it covers EPUB and PDF.
+
 ## 0.11.0 — 2026-05-31
 
 Narration smoothness + text-cleanup pass, driven by real-world testing.
