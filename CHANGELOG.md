@@ -3,6 +3,45 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.19.0 — 2026-06-01
+
+Device-reported playback/UX batch. No schema change.
+
+- **Stuck-synthesis recovery** (`FilePipeline`): sherpa-onnx sometimes
+  returns `SUCCESS` from `synthesizeToFile` but never fires `onDone`, pinning
+  the queue head on `!synthDone` forever — the "stuck synthesising, jump back
+  and forth to fix it" bug. Added a per-chunk watchdog: on timeout it re-issues
+  synthesis once (`tts.stop()` clears the engine queue, so all pending chunks
+  re-synth), then skips the stuck chunk — the manual-skip recovery, automated.
+- **Disk-persistent parse cache** (`ParsedBookCache`): the in-memory LRU died
+  with the process, so cold-start opens (and switches to a not-yet-warm book)
+  re-parsed large PDFs (>10s). Now the chapter/chunk structure is cached to
+  disk, keyed by file + page-range + skip-patterns and a parser-version stamp;
+  open is a fast read. Populated lazily and by `warmRecentBooks`, evicted on
+  finish, rejected on signature/version mismatch or corruption. Pure
+  serializer + unit tests. Verified ~1.5s cold-start open of a 91-chapter PDF.
+- **Notification progress is chapter-scoped** (`NarrationService`): duration =
+  current chapter's chunk count, position = chunk-in-chapter (was whole-book,
+  so the bar barely moved). `onSeekTo` maps the chapter-relative position back
+  to a global index.
+- **Generalised end-of-sentence noise strip** (`stripTrailingNoise`): a
+  quote/bracket sandwiched between two terminators (`.).`) was unreachable by
+  the edge-peeling strip and clicked. Now collapses `<term><noise><term>` to a
+  single terminator while leaving an ordinary `(world).` closer intact.
+- **Inline citation removal** (`TextNormalize.stripCitations`, EPUB + PDF):
+  conservative stripping of `(Smith, 2019[, p.99])`, `(see fig/box/graph/table
+  N.N)` and `[12]` markers; lowercase asides and non-citation parentheticals
+  survive. Runs before sentence splitting.
+- **Finished-book dim persists** after select→deselect (`BookAdapter`/
+  `LibraryFragment`): RecyclerView's change animation restored row alpha to 1f,
+  clobbering the bind-set 0.6f dim. Disabled change animations.
+- **Library/Player nav swapped** (Library is home) and **Back on the Player
+  returns to the Library** instead of exiting the app.
+- Not done: all-lowercase glued words ("oncesovereign") — needs dictionary
+  segmentation; left as a known limitation.
+- Tooling: detekt baseline gains one deliberate `LargeClass:Narrator` entry
+  (grew with the cache wiring); other new findings fixed in code.
+
 ## 0.18.0 — 2026-05-31
 
 Two batches shipped together — the 0.17.0 work below was never tagged
