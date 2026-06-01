@@ -77,7 +77,7 @@ class NarrationService : Service() {
             stopSelf()
             return
         }
-        mediaSession.setMetadata(buildMetadata(loaded))
+        mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state))
 
         val notification = buildNotification(state)
@@ -102,14 +102,20 @@ class NarrationService : Service() {
         }
     }
 
-    private fun buildMetadata(loaded: LoadedBook): MediaMetadataCompat {
+    private fun buildMetadata(state: NarratorState): MediaMetadataCompat {
+        val loaded = state.loaded!!
         val cover = loaded.coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
-        val chapterTitle = loaded.chapterTitles.firstOrNull().orEmpty()
+        val chapterIndex = state.position.chapterIndex
+        val chapterTitle = loaded.chapterTitles.getOrNull(chapterIndex).orEmpty()
+        // The notification seekbar fills across the CURRENT CHAPTER, not the whole book — a
+        // book-wide bar barely moves per sentence and reads as broken. Duration = the current
+        // chapter's chunk count; position (in buildPlaybackState) is the chunk index within it.
+        val chapterChunks = loaded.chapterChunkCounts.getOrNull(chapterIndex)?.coerceAtLeast(1) ?: 1
         val builder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, loaded.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, loaded.author)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, chapterTitle)
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, loaded.totalChunks.toLong())
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, chapterChunks.toLong())
         if (cover != null) builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
         return builder.build()
     }
@@ -125,7 +131,9 @@ class NarrationService : Service() {
         )
         .setState(
             if (state.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
-            state.position.globalChunk.toLong(),
+            // Position within the current chapter — matches the chapter-scoped duration in
+            // buildMetadata so the bar reflects chapter progress, not whole-book progress.
+            state.position.chunkIndex.toLong(),
             state.speed,
         )
         .build()
@@ -200,7 +208,14 @@ class NarrationService : Service() {
         }
         override fun onSkipToNext() { narrator.skipStepNext() }
         override fun onSkipToPrevious() { narrator.skipStepPrev() }
-        override fun onSeekTo(pos: Long) { narrator.seekToGlobalChunk(pos.toInt()) }
+        override fun onSeekTo(pos: Long) {
+            // The bar is chapter-scoped (see buildMetadata), so pos is a chunk index WITHIN the
+            // current chapter — add the chunks before this chapter to get the global index.
+            val st = narrator.state.value
+            val loaded = st.loaded ?: return narrator.seekToGlobalChunk(pos.toInt())
+            val base = loaded.chapterChunkCounts.take(st.position.chapterIndex).sum()
+            narrator.seekToGlobalChunk(base + pos.toInt())
+        }
     }
 
     companion object {

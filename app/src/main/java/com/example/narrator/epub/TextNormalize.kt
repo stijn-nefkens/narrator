@@ -59,6 +59,55 @@ internal object TextNormalize {
      */
     private val gluedWords = Regex("(?<!Mac)(?<=[a-z]{2})(?=[A-Z][a-z])")
 
+    /**
+     * Inline reference/citation removal. These get read aloud as noise mid-sentence, so we strip
+     * the common academic shapes. Conservative on purpose — each pattern requires citation-shaped
+     * content so ordinary parentheticals (asides, definitions, "(in 2019 he left)") survive:
+     *
+     *   - [refPointer]: "(see fig 1.3)", "(graph 4.2)", "(table 2)", "(p. 99)" — a figure/table/
+     *     page word followed by a number. "see"/"cf." lead-in optional.
+     *   - [authorYear]: "(Smith, 2019)", "(Smith & Jones, 2019, p. 99)", "(Smith et al., 2019)" —
+     *     a Capitalised author token, then a 4-digit year. The leading capital is what spares
+     *     lowercase asides that merely mention a year.
+     *   - [bracketRef]: "[12]", "[3, 4]", "[5-9]" — numbered reference markers.
+     *
+     * The leading `\s*` lets each pattern absorb the space before it so "text (Smith, 2019)."
+     * collapses cleanly to "text."; [tidyAfterCitation] mops up any space left before punctuation.
+     */
+    private val refPointer = Regex(
+        "\\s*\\((?:see\\s+|cf\\.?\\s+)?" +
+            "(?:fig(?:ure)?|box|graph|table|chart|diagram|eq(?:uation)?|" +
+            "section|chapter|appendix|p{1,2}|pg|page)\\.?\\s*\\d+(?:[.\\-]\\d+)*\\.?\\)",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val authorYear = Regex(
+        "\\s*\\([A-Z][\\w.'’-]+" +
+            "(?:(?:,| and| &|;)?\\s+(?:et al\\.?|[A-Z][\\w.'’-]+))*" +
+            ",?\\s+(?:1[5-9]\\d\\d|20\\d\\d)[a-z]?" +
+            "(?:,\\s*pp?\\.?\\s*\\d+(?:[-–]\\d+)?)?\\)",
+    )
+
+    private val bracketRef = Regex("\\s*\\[\\d+(?:\\s*[-–,]\\s*\\d+)*\\]")
+
+    /** After removing a citation we can be left with " ." / "  " — tidy those. */
+    private val spaceBeforePunct = Regex("\\s+([,.;:!?])")
+    private val doubleSpace = Regex("  +")
+
+    fun stripCitations(s: String): String {
+        if (!s.contains('(') && !s.contains('[')) return s
+        var r = s
+        r = refPointer.replace(r, "")
+        r = authorYear.replace(r, "")
+        r = bracketRef.replace(r, "")
+        if (r != s) {
+            // Removing a citation can leave " ." or doubled spaces — tidy only when we changed text.
+            r = spaceBeforePunct.replace(r, "$1")
+            r = doubleSpace.replace(r, " ")
+        }
+        return r
+    }
+
     fun restoreSentenceSpaces(s: String): String =
         if (s.length < 4) s else missingSentenceSpace.replace(s, "$1$2 ")
 
@@ -67,7 +116,8 @@ internal object TextNormalize {
 
     fun splitGluedWords(s: String): String = gluedWords.replace(s, " ")
 
-    /** Master entry applied by [Sentences.split] before sentence breaking. */
+    /** Master entry applied by [Sentences.split] before sentence breaking. Citations are stripped
+     *  first so the leftover text flows as one clean sentence into the rest of the pipeline. */
     fun normalize(s: String): String =
-        splitGluedWords(stripGroupingCommas(restoreSentenceSpaces(s)))
+        splitGluedWords(stripGroupingCommas(restoreSentenceSpaces(stripCitations(s))))
 }

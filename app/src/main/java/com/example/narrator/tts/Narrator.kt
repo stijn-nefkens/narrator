@@ -120,6 +120,10 @@ class Narrator(
             size > MAX_PARSE_CACHE
     }
 
+    /** Disk home for [com.example.narrator.data.ParsedBookCache] — the persistent twin of
+     *  [parseCache] that survives process death, so a cold-start open isn't a fresh parse. */
+    private val parsedCacheDir = File(context.filesDir, "parsed-cache")
+
     // Running totals used to estimate remaining time. Reset on book load.
     private var statsCompletedMs: Long = 0L
     private var statsCompletedChunks: Int = 0
@@ -254,22 +258,36 @@ class Narrator(
         val signature = cacheSignature(book)
         val cached = parseCache[bookId]?.takeIf { it.signature == signature }?.book
         val parsed: Book = if (cached != null) {
-            // Cache hit — no parse, no spinner. The switch is instant.
+            // In-memory cache hit — no parse, no spinner. The switch is instant.
             cached
         } else {
-            // Surface a spinner immediately — PDF parsing of a large book can take a few
-            // seconds, and without feedback the tap into the Player looks like nothing happened.
-            _state.value = _state.value.copy(loading = true)
-            val p = try {
-                withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
-            } catch (e: Exception) {
-                android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
-                // Leave state unchanged so the player keeps whatever was previously loaded.
-                _state.value = _state.value.copy(loading = false)
-                return
+            // Disk cache survives process death, so a cold-start open of a large PDF is a fast
+            // read instead of a multi-second re-parse. Finished books aren't cached.
+            val diskChapters = if (book.isFinished) null else withContext(Dispatchers.IO) {
+                com.example.narrator.data.ParsedBookCache.read(parsedCacheDir, bookId, signature)
             }
-            cachePut(bookId, signature, p, book.isFinished)
-            p
+            if (diskChapters != null) {
+                val p = Book(book.title, book.author, diskChapters, null, null)
+                cachePut(bookId, signature, p, book.isFinished)  // warm the in-memory cache too
+                p
+            } else {
+                // Surface a spinner immediately — PDF parsing of a large book can take a few
+                // seconds, and without feedback the tap into the Player looks like nothing happened.
+                _state.value = _state.value.copy(loading = true)
+                val p = try {
+                    withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
+                } catch (e: Exception) {
+                    android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
+                    // Leave state unchanged so the player keeps whatever was previously loaded.
+                    _state.value = _state.value.copy(loading = false)
+                    return
+                }
+                cachePut(bookId, signature, p, book.isFinished)
+                if (!book.isFinished) withContext(Dispatchers.IO) {
+                    com.example.narrator.data.ParsedBookCache.write(parsedCacheDir, bookId, signature, p.chapters)
+                }
+                p
+            }
         }
         chunksByChapter = parsed.chapters.map { it.chunks }
         val total = chunksByChapter.sumOf { it.size }
@@ -329,6 +347,7 @@ class Narrator(
     private fun cachePut(bookId: Long, signature: String, book: Book, finished: Boolean) {
         if (finished) {
             parseCache.remove(bookId)
+            com.example.narrator.data.ParsedBookCache.delete(parsedCacheDir, bookId)
             return
         }
         // Drop cover bytes before caching — the Player loads the cover from disk via coverPath,
@@ -354,7 +373,14 @@ class Narrator(
                 val signature = cacheSignature(book)
                 if (parseCache[book.id]?.signature == signature) continue  // already warm
                 val parsed = withContext(Dispatchers.IO) {
-                    runCatching { parseBookFile(File(book.epubPath), book) }.getOrNull()
+                    // Prefer the disk cache; only parse (and then persist) on a miss.
+                    com.example.narrator.data.ParsedBookCache.read(parsedCacheDir, book.id, signature)
+                        ?.let { Book(book.title, book.author, it, null, null) }
+                        ?: runCatching { parseBookFile(File(book.epubPath), book) }.getOrNull()
+                            ?.also {
+                                com.example.narrator.data.ParsedBookCache
+                                    .write(parsedCacheDir, book.id, signature, it.chapters)
+                            }
                 } ?: continue
                 cachePut(book.id, signature, parsed, book.isFinished)
             }

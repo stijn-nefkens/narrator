@@ -71,6 +71,12 @@ class LibraryFragment : Fragment() {
         )
         binding.libraryList.layoutManager = LinearLayoutManager(requireContext())
         binding.libraryList.adapter = adapter
+        // The default change-animation cross-fades the old/new ViewHolder and restores the row's
+        // alpha to 1f when it ends — which clobbered the 0.6f dim BookAdapter.bind sets on a
+        // finished book right after a select→deselect (notifyItemChanged). Turning change
+        // animations off keeps the bind-set alpha authoritative (and removes selection flicker).
+        (binding.libraryList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
         attachSwipeToDelete()
 
         val pickFile = View.OnClickListener {

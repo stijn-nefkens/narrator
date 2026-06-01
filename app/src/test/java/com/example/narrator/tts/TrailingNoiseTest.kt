@@ -40,6 +40,23 @@ class TrailingNoiseTest {
         )
     }
 
+    @Test fun `collapses a bracket sandwiched between two terminators`() {
+        // The [.).] family: a parenthetical that itself ends in a terminator, then the sentence
+        // terminator — the ")" sits between two periods and clicks. trimEnd can't reach it because
+        // the string still ends in a real terminator. Keep one terminator, drop the bracket.
+        assertEquals("(He left.", FilePipeline.stripTrailingNoise("(He left.)."))
+        assertEquals("the end.", FilePipeline.stripTrailingNoise("the end.).]"))
+        assertEquals("(Really?", FilePipeline.stripTrailingNoise("(Really?)."))
+        assertEquals("done.", FilePipeline.stripTrailingNoise("done.”)."))
+    }
+
+    @Test fun `keeps a normal closing bracket before the terminator`() {
+        // Here the ")" closes ordinary content (preceded by a letter, not a terminator), so it's
+        // NOT the sandwiched case — leave it intact, just like mid-text brackets.
+        assertEquals("(world).", FilePipeline.stripTrailingNoise("(world)."))
+        assertEquals("see (above).", FilePipeline.stripTrailingNoise("see (above)."))
+    }
+
     @Test fun `every declared noise char is stripped when trailing`() {
         for (c in FilePipeline.TRAILING_NOISE_CHARS) {
             val s = "word$c"

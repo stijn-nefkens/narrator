@@ -12,6 +12,7 @@
     <ID>EmptyFunctionBlock:FilePipeline.kt$FilePipeline.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:LibraryFragment.kt$LibraryFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:SettingsFragment.kt$SettingsFragment.&lt;no name provided&gt;${}</ID>
+    <ID>LargeClass:Narrator.kt$Narrator</ID>
     <ID>LongMethod:LibraryFragment.kt$LibraryFragment$private fun openRenameDialog(item: BookWithProgress)</ID>
     <ID>LongMethod:PlayerFragment.kt$PlayerFragment$@Suppress("ClickableViewAccessibility") private fun setupSpeedGesture()</ID>
     <ID>LongMethod:PlayerFragment.kt$PlayerFragment$private fun render(state: NarratorState)</ID>

@@ -258,6 +258,7 @@ internal class FilePipeline(
     private fun synthesise(chunk: PendingChunk) {
         val synthId = "synth_${UUID.randomUUID()}"
         chunk.synthId = synthId
+        chunk.synthDone = false
         // sherpa-onnx / Kokoro renders trailing quotes / brackets as a small fricative "ktsh"
         // artifact after the last word. Strip them — the period or other terminator before the
         // quote/bracket still carries the correct sentence intonation.
@@ -267,11 +268,47 @@ internal class FilePipeline(
         Log.d(TAG, "synth_start id=${chunk.id} text_len=${text.length} result=$result")
         if (result != TextToSpeech.SUCCESS) {
             handler.post { handleSynthError(synthId, result) }
+            return
+        }
+        // Watchdog: some engines (sherpa-onnx especially) occasionally return SUCCESS but never
+        // fire onDone, leaving the queue head stuck on !synthDone forever — the user's "stuck
+        // synthesising, jump back and forth to fix it" bug. If this chunk hasn't completed in
+        // time, treat the engine as stalled and recover automatically (see onSynthWatchdog).
+        cancelWatchdog(chunk)
+        val watchdog = Runnable { onSynthWatchdog(chunk) }
+        chunk.synthWatchdog = watchdog
+        handler.postDelayed(watchdog, SYNTH_TIMEOUT_MS)
+    }
+
+    private fun cancelWatchdog(chunk: PendingChunk) {
+        chunk.synthWatchdog?.let { handler.removeCallbacks(it) }
+        chunk.synthWatchdog = null
+    }
+
+    /**
+     * Fired when a chunk's synthesis hasn't completed within [SYNTH_TIMEOUT_MS]. First [MAX_SYNTH_RETRIES]
+     * timeouts re-issue synthesis: [TextToSpeech.stop] clears the engine's internal queue (which
+     * also cancels the other not-yet-done chunks, so we re-synthesise every pending one). Past the
+     * retry budget we give up on the stuck chunk and skip it like a synth error, so playback
+     * resumes with the next sentence instead of hanging.
+     */
+    private fun onSynthWatchdog(chunk: PendingChunk) {
+        if (chunk.synthDone || queue.none { it === chunk }) return
+        chunk.synthRetries++
+        Log.w(TAG, "synth_watchdog id=${chunk.id} retries=${chunk.synthRetries} — engine stalled")
+        if (chunk.synthRetries > MAX_SYNTH_RETRIES) {
+            handleSynthError(chunk.synthId, WATCHDOG_ERROR_CODE)
+            return
+        }
+        runCatching { tts.stop() }  // clears the engine's queue — cancels every pending synth
+        for (c in queue) {
+            if (!c.synthDone) synthesise(c)
         }
     }
 
     private fun handleSynthDone(synthUtteranceId: String?) {
         val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
+        cancelWatchdog(chunk)
         chunk.synthDone = true
         consecutiveSynthErrors = 0
         chunk.synthEndAt = android.os.SystemClock.elapsedRealtime()
@@ -289,6 +326,7 @@ internal class FilePipeline(
 
     private fun handleSynthError(synthUtteranceId: String?, code: Int) {
         val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
+        cancelWatchdog(chunk)
         consecutiveSynthErrors++
         Log.w(TAG, "synth_error id=${chunk.id} code=$code consecutive=$consecutiveSynthErrors")
         if (consecutiveSynthErrors >= maxConsecutiveSynthErrors) {
@@ -447,6 +485,7 @@ internal class FilePipeline(
         currentSegmentOffset = 0
         currentSegmentPositionId = null
         for (chunk in queue) {
+            cancelWatchdog(chunk)
             runCatching { chunk.file.delete() }
         }
         queue.clear()
@@ -474,6 +513,10 @@ internal class FilePipeline(
         val isChapterTitle: Boolean = false,
         var synthId: String? = null,
         var synthDone: Boolean = false,
+        /** Pending watchdog for this chunk's synthesis (see onSynthWatchdog); null when none armed. */
+        var synthWatchdog: Runnable? = null,
+        /** How many times synthesis has been re-issued for this chunk after a watchdog timeout. */
+        var synthRetries: Int = 0,
         var synthStartAt: Long = 0L,
         var synthEndAt: Long = 0L,
         var playStartAt: Long = 0L,
@@ -503,6 +546,13 @@ internal class FilePipeline(
         private const val CHAPTER_PAUSE_MS = 1500L
         /** Shorter beat after a chapter heading, before the chapter body begins. */
         private const val TITLE_PAUSE_MS = 900L
+        /** How long to wait for a single chunk's synthesis before deeming the engine stalled. Synth
+         *  of one sentence is normally well under a second; this is a generous ceiling. */
+        private const val SYNTH_TIMEOUT_MS = 10_000L
+        /** Re-issue synthesis this many times on watchdog timeout before skipping the stuck chunk. */
+        private const val MAX_SYNTH_RETRIES = 1
+        /** Synthetic error code logged when the watchdog gives up on a chunk. */
+        private const val WATCHDOG_ERROR_CODE = -2
         // Trailing characters sherpa-onnx renders as audible artifacts (a "ktsh" or "snort"
         // sound after the last word). The sentence terminator (. ! ?) sits BEFORE these, so
         // trimming them keeps the correct intonation. Two families:
@@ -528,9 +578,46 @@ internal class FilePipeline(
             ' ', '\t', '\n', '\r',
         )
 
-        /** Strips trailing noise chars (quotes, brackets, whitespace) that sherpa-onnx would
-         *  otherwise render as an audible click. Pure + testable; used by [synthesise]. */
+        /** Sentence terminators — kept (they carry intonation), but used to detect a quote/bracket
+         *  *sandwiched* between two terminators (see [stripTrailingNoise] step 2). */
+        private val SENTENCE_TERMINATORS = charArrayOf('.', '!', '?')
+
+        /** Closing quotes/brackets that click when the engine renders them — the noise set minus
+         *  the whitespace members. A run of these between two terminators is the [.).] case. */
         @androidx.annotation.VisibleForTesting
-        internal fun stripTrailingNoise(text: String): String = text.trimEnd(*TRAILING_NOISE_CHARS)
+        internal val CLOSING_NOISE_CHARS = charArrayOf(
+            '"', '\'', '“', '”', '‘', '’', '«', '»', '‹', '›', '„', '‚', ')', ']', '}',
+        )
+
+        /**
+         * Strips trailing noise the engine would render as an audible click. Two passes:
+         *
+         *   1. Peel any quotes / brackets / whitespace off the very end (the original fix —
+         *      handles `she said."`, `(an aside).)`, `oui.»`).
+         *   2. Collapse a terminator that has quote/bracket noise *sandwiched* before it —
+         *      `<term><closing-noise…><term>$` — down to the inner terminator. This reaches the
+         *      `[.).]` family (`(He left.).`, `…word.).]`) that pass 1 can't, because the string
+         *      still ends in a real terminator so trimEnd stops immediately. A bracket that is
+         *      NOT preceded by a terminator (an ordinary `(world).`) is left untouched.
+         *
+         * Pure + testable; used by [synthesise].
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun stripTrailingNoise(text: String): String {
+            var s = text.trimEnd(*TRAILING_NOISE_CHARS)
+            while (s.isNotEmpty() && s.last() in SENTENCE_TERMINATORS) {
+                var i = s.length - 2
+                var sawNoise = false
+                while (i >= 0 && s[i] in CLOSING_NOISE_CHARS) {
+                    sawNoise = true
+                    i--
+                }
+                // Only collapse when a quote/bracket run sits between this terminator and another
+                // terminator before it; otherwise we'd strip a legitimate "(world)." closer.
+                if (!sawNoise || i < 0 || s[i] !in SENTENCE_TERMINATORS) break
+                s = s.substring(0, i + 1)  // keep the inner terminator, drop noise + outer terminator
+            }
+            return s
+        }
     }
 }

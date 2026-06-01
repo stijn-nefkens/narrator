@@ -75,6 +75,43 @@ class TextNormalizeTest {
         assertEquals("USData", TextNormalize.splitGluedWords("USData"))
     }
 
+    // --- stripCitations --------------------------------------------------
+
+    @Test fun `strips author-year citations`() {
+        assertEquals("He left early.", TextNormalize.stripCitations("He left (Smith, 2019) early."))
+        assertEquals("It is shown.", TextNormalize.stripCitations("It is shown (Smith & Jones, 2019, p. 99)."))
+        assertEquals("Many agree.", TextNormalize.stripCitations("Many agree (Smith et al., 2019)."))
+        assertEquals("True.", TextNormalize.stripCitations("True (Smith 2019)."))
+    }
+
+    @Test fun `strips reference pointers`() {
+        assertEquals("As shown.", TextNormalize.stripCitations("As shown (see fig 1.3)."))
+        assertEquals("The trend rises.", TextNormalize.stripCitations("The trend rises (see graph 4.2)."))
+        assertEquals("Defined earlier.", TextNormalize.stripCitations("Defined earlier (see box 1.3)."))
+        assertEquals("The data.", TextNormalize.stripCitations("The data (table 2)."))
+        assertEquals("See it.", TextNormalize.stripCitations("See it (p. 99)."))
+    }
+
+    @Test fun `strips numbered bracket references`() {
+        assertEquals("This is known.", TextNormalize.stripCitations("This is known [12]."))
+        assertEquals("Several sources agree.", TextNormalize.stripCitations("Several sources agree [3, 4]."))
+    }
+
+    @Test fun `leaves ordinary parentheticals and stray brackets alone`() {
+        // Lowercase lead-in mentioning a year is an aside, not a citation.
+        assertEquals(
+            "He left (in 2019 he was busy) then.",
+            TextNormalize.stripCitations("He left (in 2019 he was busy) then."),
+        )
+        // A capitalised aside without the author→year shape survives.
+        assertEquals(
+            "The result (published in Nature) was huge.",
+            TextNormalize.stripCitations("The result (published in Nature) was huge."),
+        )
+        // No parentheses or brackets → returned untouched.
+        assertEquals("Plain sentence.", TextNormalize.stripCitations("Plain sentence."))
+    }
+
     @Test fun `normalize chains number, dot-glue and glued-word fixes`() {
         assertEquals(
             "We raised 200000. Then morning Came.",

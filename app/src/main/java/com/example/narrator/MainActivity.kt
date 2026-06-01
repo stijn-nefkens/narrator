@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -78,6 +79,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         wireMiniPlayer()
+
+        // Back from any non-Library tab returns to the Library (the home tab) rather than closing
+        // the app; back from the Library exits as usual. LibraryFragment registers its own
+        // selection-mode back callback on its view lifecycle — added later than this one, so the
+        // dispatcher (LIFO) lets it consume back first while multi-select is active.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (currentTag != TAG_LIBRARY) {
+                    // Triggers the nav listener → switchTo(Library) + mini-player refresh.
+                    binding.bottomNav.selectedItemId = R.id.nav_library
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()  // hand back to the system to finish
+                    isEnabled = true
+                }
+            }
+        })
 
         if (savedInstanceState == null && !VoicePreferences.isSetupDone(this)) {
             startActivity(VoiceSetupActivity.intent(this, firstRun = true))
