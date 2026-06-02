@@ -834,8 +834,13 @@ class Narrator(
 
     private fun onChunkComplete() {
         val s = _state.value
-        if (!s.isPlaying) return
         val loaded = s.loaded ?: return
+        // Do NOT bail when paused. A completion means the pipeline finished + dequeued this
+        // sentence and primed the next one. If the user pauses in the split second between the
+        // audio ending and this callback running, bailing left Narrator's position on the
+        // just-finished sentence while the pipeline had moved on — so resuming re-primed and
+        // REPLAYED that sentence. Advancing unconditionally keeps the two in sync; while paused
+        // nothing starts playing (the prefetch below just banks audio) until the user resumes.
         // Record timing for remainingMs() before any state changes.
         if (s.currentChunkStartedAt > 0L) {
             val playMs = SystemClock.elapsedRealtime() - s.currentChunkStartedAt
@@ -866,10 +871,14 @@ class Narrator(
             persistBookmark()
             return
         }
-        // The next chunk was prefetched and the engine is already speaking it. Move state forward
-        // and top the prefetch buffer back up with one more chunk at the tail end.
+        // The next chunk was prefetched (and, when playing, the engine is already speaking it).
+        // Move state forward and top the prefetch buffer back up with one more chunk at the tail.
         _state.value = s.copy(position = nextPos)
         updateCurrentTexts()
+        // If this completion landed while paused (the boundary race above), the pause() call
+        // already wrote a bookmark at the OLD position — refresh it so a close-while-paused
+        // resumes at the next sentence, not the one that just finished.
+        if (!s.isPlaying) persistBookmark()
         val tail = positionAhead(nextPos, PREFETCH_DEPTH)
         if (tail != null) {
             chunkTextAt(tail)?.let {
