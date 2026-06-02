@@ -1,0 +1,2 @@
+- Fixed a bug where pausing right as a sentence finished and then
+  resuming replayed that sentence instead of moving on to the next one.

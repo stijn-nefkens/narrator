@@ -3,6 +3,16 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.19.2 — 2026-06-02
+
+- **Pause-at-sentence-boundary replay fixed** (`Narrator.onChunkComplete`):
+  pausing in the split second after a sentence's last segment finished but before
+  its completion callback ran left Narrator's position behind the pipeline (which
+  had already dequeued the sentence and primed the next), so resume re-primed and
+  replayed the finished sentence. The position now advances on completion
+  regardless of play/pause state, and the bookmark is refreshed if the advance
+  lands while paused. Mid-sentence pause/resume is unaffected.
+
 ## 0.19.1 — 2026-06-02
 
 Hotfix for playback regressions introduced in 0.19.0. No schema change.
