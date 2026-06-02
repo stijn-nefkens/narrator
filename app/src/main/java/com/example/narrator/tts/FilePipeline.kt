@@ -546,9 +546,11 @@ internal class FilePipeline(
         private const val CHAPTER_PAUSE_MS = 1500L
         /** Shorter beat after a chapter heading, before the chapter body begins. */
         private const val TITLE_PAUSE_MS = 900L
-        /** How long to wait for a single chunk's synthesis before deeming the engine stalled. Synth
-         *  of one sentence is normally well under a second; this is a generous ceiling. */
-        private const val SYNTH_TIMEOUT_MS = 10_000L
+        /** How long to wait for a single chunk's synthesis before deeming the engine stalled. This
+         *  must be a true last-resort ceiling: at 10s it tripped during normal synthesis of long
+         *  sentences (causing the very gaps/stalls it was meant to prevent), so it's 60s — well
+         *  beyond any legitimate single-chunk synth now that the cut curve is bounded. */
+        private const val SYNTH_TIMEOUT_MS = 60_000L
         /** Re-issue synthesis this many times on watchdog timeout before skipping the stuck chunk. */
         private const val MAX_SYNTH_RETRIES = 1
         /** Synthetic error code logged when the watchdog gives up on a chunk. */

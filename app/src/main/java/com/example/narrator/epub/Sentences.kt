@@ -27,13 +27,21 @@ internal object Sentences {
      *   depth 0 (cold start / starved): 70/45  — fast first audio, the 0.13 behaviour
      *   depth 1:                        110/75 — cut a bit more to bank audio faster
      *   depth 2:                        170/120
-     *   depth 3+:                       whole sentence (cap at MAX_CHUNK_CHARS)
+     *   depth 3:                        240/180
+     *   depth 4+:                       320/240 — the bounded ceiling
+     *
+     * The curve is BOUNDED — earlier it jumped to "whole sentence" (MAX_CHUNK_CHARS) at depth 3+,
+     * but a single very long sentence then synthesised as one 400–500 char chunk that took many
+     * seconds, starving playback (audible gaps) and tripping the synth watchdog. Capping the
+     * ceiling well under MAX_CHUNK_CHARS keeps even a deeply-buffered reader cutting a long
+     * sentence into a couple of pieces the engine can synth quickly. The hard MAX_CHUNK_CHARS cut
+     * still exists in [subChunkByClauses] as the last resort for space-less mega-tokens.
      *
      * Depths 1–2 were tightened (from 130/90 and 220/160) after testing: an occasional
      * stop-to-synthesise mid-playback is more jarring than a slightly-glued sentence, so we keep
-     * cutting a touch longer to build buffer headroom before reading whole. Cold start (depth 0)
-     * is unchanged — first audio must stay snappy. [threshold] is the length above which a
-     * sentence is sub-chunked at all; [target] is the preferred cut length when it is.
+     * cutting a touch longer to build buffer headroom. Cold start (depth 0) is unchanged — first
+     * audio must stay snappy. [threshold] is the length above which a sentence is sub-chunked at
+     * all; [target] is the preferred cut length when it is.
      */
     data class CutBudget(val threshold: Int, val target: Int)
 
@@ -41,7 +49,8 @@ internal object Sentences {
         depth <= 0 -> CutBudget(SUB_CHUNK_THRESHOLD, SUB_CHUNK_TARGET)
         depth == 1 -> CutBudget(110, 75)
         depth == 2 -> CutBudget(170, 120)
-        else -> CutBudget(MAX_CHUNK_CHARS, MAX_CHUNK_CHARS)
+        depth == 3 -> CutBudget(240, 180)
+        else -> CutBudget(320, 240)
     }
 
     /**

@@ -15,6 +15,14 @@ class SentencesAdaptiveTest {
         "Alice opened the door and stepped into the corridor, paused for a long moment " +
             "to look around, and then walked slowly toward the distant flickering light."
 
+    // A ~330-char sentence: exceeds even the bounded deep-buffer ceiling, so it must still split
+    // at every depth (a single chunk this long synthesises too slowly and starves playback).
+    private val veryLongSentence =
+        "Alice opened the door and stepped into the corridor, paused for a long moment to look " +
+            "around, and then walked slowly toward the distant flickering light, wondering whether " +
+            "the winding path would lead her safely home again, or only deeper into the unfamiliar " +
+            "dark, where the strange whispers seemed to gather and grow louder with every step."
+
     // --- budgetForDepth curve --------------------------------------------
 
     @Test fun `budget grows with buffer depth`() {
@@ -25,8 +33,13 @@ class SentencesAdaptiveTest {
         assertTrue(d0.target < d1.target)
         assertTrue(d1.target < d2.target)
         assertTrue(d2.target < d3.target)
-        // Deep buffer = effectively no cutting until the hard cap.
-        assertEquals(Sentences.MAX_CHUNK_CHARS, d3.threshold)
+        // The curve is BOUNDED: even deep buffer caps chunk size well under the hard
+        // MAX_CHUNK_CHARS, so a very long sentence is never sent whole (it synths too slowly and
+        // starves playback). The deepest budget is a flat ceiling.
+        assertTrue(d3.threshold < Sentences.MAX_CHUNK_CHARS)
+        val deep = Sentences.budgetForDepth(10)
+        assertTrue(deep.threshold < Sentences.MAX_CHUNK_CHARS)
+        assertTrue(deep.target >= d3.target)
     }
 
     @Test fun `negative or zero depth is the cold-start budget`() {
@@ -44,6 +57,13 @@ class SentencesAdaptiveTest {
         val parts = Sentences.subChunk(longSentence, Sentences.budgetForDepth(3))
         assertEquals("expected deep buffer to keep it whole, got: $parts", 1, parts.size)
         assertEquals(longSentence, parts[0])
+    }
+
+    @Test fun `a very long sentence is still split at the deepest buffer`() {
+        assertTrue("fixture must exceed the ceiling", veryLongSentence.length > 320)
+        val parts = Sentences.subChunk(veryLongSentence, Sentences.budgetForDepth(10))
+        assertTrue("deep buffer must still cap chunk length, got: $parts", parts.size > 1)
+        assertTrue(parts.all { it.length <= Sentences.MAX_CHUNK_CHARS })
     }
 
     @Test fun `mid buffer cuts less than cold start`() {

@@ -134,7 +134,12 @@ class NarrationService : Service() {
             // Position within the current chapter — matches the chapter-scoped duration in
             // buildMetadata so the bar reflects chapter progress, not whole-book progress.
             state.position.chunkIndex.toLong(),
-            state.speed,
+            // Extrapolation speed MUST be 0, not the audio speed: position/duration are chunk
+            // *indices* (tiny), and the system advances position by elapsed-time × this speed
+            // while playing. With a real speed it shot past the chapter's chunk count within a
+            // second and pinned the bar at 100%. At 0 the bar holds the value we set and steps
+            // once per chunk (we publish a new state on every chunk change).
+            0f,
         )
         .build()
 
