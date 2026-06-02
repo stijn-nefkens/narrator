@@ -3,6 +3,29 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.19.1 — 2026-06-02
+
+Hotfix for playback regressions introduced in 0.19.0. No schema change.
+
+- **Synth watchdog timeout 10s → 60s** (`FilePipeline`): at 10s the new
+  stuck-synthesis net tripped during normal synthesis of long sentences, so it
+  `tts.stop()`'d and re-synthesised constantly — the stalls/gaps (and
+  caption-highlight desync) it was meant to prevent. Now a true last-resort net.
+- **Bounded the cut curve** (`Sentences.budgetForDepth`): the top tier was
+  "whole sentence" (MAX_CHUNK_CHARS), so a deeply-buffered reader synthesised a
+  single 400–500 char chunk that starved playback and tripped the watchdog.
+  Now depth 3 = 240/180, depth 4+ = 320/240 — long sentences always split into
+  pieces the engine can synth quickly. Hard MAX_CHUNK_CHARS cut still backstops
+  space-less mega-tokens.
+- **Notification progress no longer pinned at 100%** (`NarrationService`): the
+  MediaSession extrapolates position by elapsed-time × playbackSpeed, but our
+  position/duration are chunk indices, so any non-zero speed overshot the
+  chapter length within a second. Set the extrapolation speed to 0 so the bar
+  holds the published value and steps once per chunk.
+- **CI**: tagged release builds now publish — the workflow lacked
+  `contents: write`, so the "attach release APK" step failed on every tag
+  (v0.18.0, v0.19.0) despite a clean build.
+
 ## 0.19.0 — 2026-06-01
 
 Device-reported playback/UX batch. No schema change.

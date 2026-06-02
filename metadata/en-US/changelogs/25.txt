@@ -1,0 +1,9 @@
+Fixes playback regressions from 0.19.0.
+
+- Playback no longer stalls or stutters: the new stuck-synthesis safety
+  net was triggering during normal reading. It now only steps in for a
+  genuinely hung voice engine.
+- Long sentences are split into smaller pieces again, so the voice keeps
+  up instead of pausing to synthesise a big block.
+- The notification progress bar no longer sits at 100% — it now tracks
+  your position within the current chapter.
