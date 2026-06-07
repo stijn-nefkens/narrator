@@ -5,9 +5,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
@@ -35,6 +38,19 @@ class NarrationService : Service() {
     private var collectorJob: Job? = null
     private var startedForeground = false
 
+    /** Pause when audio is about to become "noisy" — headphones unplugged, Bluetooth disconnected,
+     *  output routed to the speaker. Standard media behaviour so a book doesn't suddenly blast the
+     *  phone speaker. (Audio-focus loss, e.g. calls, is handled separately in Narrator.) */
+    private val becomingNoisyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY &&
+                narrator.state.value.isPlaying
+            ) {
+                narrator.togglePlayPause()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -42,6 +58,11 @@ class NarrationService : Service() {
             setCallback(MediaCallback())
             isActive = true
         }
+        ContextCompat.registerReceiver(
+            this, becomingNoisyReceiver,
+            IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         collectorJob = scope.launch {
             narrator.state.collect(::onStateChanged)
         }
@@ -62,6 +83,7 @@ class NarrationService : Service() {
     override fun onDestroy() {
         collectorJob?.cancel()
         scope.cancel()
+        runCatching { unregisterReceiver(becomingNoisyReceiver) }
         mediaSession.isActive = false
         mediaSession.release()
         super.onDestroy()

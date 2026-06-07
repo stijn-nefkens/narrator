@@ -92,6 +92,18 @@ class TextNormalizeTest {
         assertEquals("See it.", TextNormalize.stripCitations("See it (p. 99)."))
     }
 
+    @Test fun `strips multiple semicolon-separated citations in one parenthetical`() {
+        assertEquals("Many agree.", TextNormalize.stripCitations("Many agree (Smith, 2020; Jones, 2018)."))
+        assertEquals(
+            "Several confirm it.",
+            TextNormalize.stripCitations("Several confirm it (Brown et al., 2021; Smith & Lee, 2019, p. 9)."),
+        )
+        assertEquals(
+            "It holds.",
+            TextNormalize.stripCitations("It holds (Smith, 2019a; Smith, 2019b; Jones & Tan, 2020)."),
+        )
+    }
+
     @Test fun `strips numbered bracket references`() {
         assertEquals("This is known.", TextNormalize.stripCitations("This is known [12]."))
         assertEquals("Several sources agree.", TextNormalize.stripCitations("Several sources agree [3, 4]."))

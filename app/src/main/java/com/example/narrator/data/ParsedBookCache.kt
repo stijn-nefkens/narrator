@@ -26,8 +26,9 @@ internal object ParsedBookCache {
     private const val MAGIC = 0x4E504243 // "NPBC"
 
     /** Bump when the parsers or [com.example.narrator.epub.TextNormalize] change their output, so
-     *  caches written by an older build are rejected and the book is re-parsed once. */
-    const val PARSER_VERSION = 1
+     *  caches written by an older build are rejected and the book is re-parsed once.
+     *  v2: multi-citation stripping, name-initial shielding, stricter figure-caption drop. */
+    const val PARSER_VERSION = 2
 
     fun serialize(signature: String, chapters: List<Chapter>): ByteArray {
         val bos = ByteArrayOutputStream()

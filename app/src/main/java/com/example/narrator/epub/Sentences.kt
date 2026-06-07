@@ -76,6 +76,15 @@ internal object Sentences {
 
     private val SENTENCE_END = charArrayOf('.', '!', '?')
 
+    /** Private-use placeholder swapped in for the period inside name initials so BreakIterator
+     *  can't treat "J.H. Blom" / "J. Blom" as a sentence boundary; restored after segmentation. */
+    private const val INITIAL_DOT = '\uE000'
+
+    /** A single-capital initial followed by a period and then (optionally a space and) another
+     *  capital — i.e. "J." in "J.H.", "J. Blom", "U.S." The lookbehind keeps it to genuine
+     *  one-letter initials, not the last letter of a word ("USA."). */
+    private val INITIAL_PERIOD = Regex("(?<![A-Za-z])([A-Z])\\.(?=\\s?[A-Z])")
+
     /**
      * If [paragraph] begins with the chapter [title] glued to the body — e.g. an inline heading
      * "Chapter One It was a dark night." or a PDF heading line that ran into the first line —
@@ -110,13 +119,16 @@ internal object Sentences {
         // Repair run-together sentences and strip numeric grouping commas before the
         // BreakIterator sees the text. Shared with the PDF pipeline via TextNormalize.
         val repaired = TextNormalize.normalize(text)
+        // Shield name initials ("J.H. Blom", "J. Blom") so BreakIterator can't split the name
+        // across sentences on the period between initials; restore the periods in each piece.
+        val shielded = INITIAL_PERIOD.replace(repaired) { m -> "${m.groupValues[1]}$INITIAL_DOT" }
         val it = BreakIterator.getSentenceInstance(locale)
-        it.setText(repaired)
+        it.setText(shielded)
         val raw = mutableListOf<String>()
         var start = it.first()
         var end = it.next()
         while (end != BreakIterator.DONE) {
-            val piece = repaired.substring(start, end).trim()
+            val piece = shielded.substring(start, end).replace(INITIAL_DOT, '.').trim()
             if (piece.isNotEmpty()) raw.add(piece)
             start = end
             end = it.next()

@@ -335,16 +335,29 @@ object PdfParser {
         return lines.filterIndexed { idx, _ -> !drop[idx] }
     }
 
-    /** Drops short paragraphs that look like image / figure / table captions. These
-     *  interrupt the reading flow with single-sentence asides that often don't make sense
-     *  without seeing the figure. */
+    /** A figure/table label with its number at the very start: "Figure 4.2", "Table 3", "Fig. 1.1". */
+    private val captionLabel = Regex(
+        "(?i)^(figure|fig\\.?|table|chart|graph|diagram|image|photo|illustration|plate)\\s*\\d+(\\.\\d+)*"
+    )
+
+    /**
+     * Drops paragraphs that are clearly an image / figure / table CAPTION ("Figure 4.2 The
+     * political map of the Netherlands, 1850.") — they interrupt the reading flow and rarely make
+     * sense without the figure. Deliberately conservative so it never eats real prose that merely
+     * *refers* to a figure: a caption's label is followed by a separator and/or a capitalised
+     * label, whereas a sentence continues with a lowercase word ("Figure 4.2 shows that…",
+     * "Figure 4.2 was redrawn…") — those are kept.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun looksLikeImageCaption(paragraph: String): Boolean {
-        if (paragraph.length > 220) return false  // a real paragraph is usually longer
-        val captionStart = Regex(
-            "(?i)^(figure|fig\\.|table|chart|graph|diagram|image|photo|illustration|plate)\\s*\\d"
-        )
-        return captionStart.containsMatchIn(paragraph)
+        val p = paragraph.trimStart()
+        val m = captionLabel.find(p) ?: return false
+        // Everything after the "Figure N.N" label, minus a leading caption separator.
+        val rest = p.substring(m.range.last + 1).trimStart(' ', ':', '.', '-', '–', '—', ')', '\t')
+        // Bare label ("Figure 4.2") ⇒ caption. Otherwise a caption's label is capitalised, while
+        // prose continues with a lowercase word ("Figure 4.2 shows…") ⇒ keep.
+        val firstLetter = rest.firstOrNull { it.isLetter() }
+        return firstLetter == null || firstLetter.isUpperCase()
     }
 
     /** Joins PDFBox line outputs into paragraph strings: a blank line separates paragraphs,

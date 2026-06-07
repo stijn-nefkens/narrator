@@ -100,6 +100,19 @@ class PdfParserHeuristicsTest {
         ))
     }
 
+    @Test fun `decimal-numbered caption with a capitalised label is detected`() {
+        assertTrue(PdfParser.looksLikeImageCaption(
+            "Figure 4.2 The political map of the Netherlands, 1850."
+        ))
+        assertTrue(PdfParser.looksLikeImageCaption("Figure 4.2"))  // bare label, no description
+    }
+
+    @Test fun `prose that starts with a figure reference is kept`() {
+        // Lowercase word after the number ⇒ the label is the subject of a real sentence.
+        assertFalse(PdfParser.looksLikeImageCaption("Figure 4.2 shows that support declined sharply."))
+        assertFalse(PdfParser.looksLikeImageCaption("Figure 4.2 was redrawn for clarity."))
+    }
+
     // --- table detection -------------------------------------------------
 
     @Test fun `wide-gap line is tabular`() {

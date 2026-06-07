@@ -118,6 +118,17 @@ class SentencesAdaptiveTest {
         assertEquals("a long sentence is one position unit, not pre-split: $units", 1, units.size)
     }
 
+    @Test fun `name initials are not split across sentences`() {
+        // Long enough that, if the period after "J.H." were treated as a sentence end, "J.H."
+        // would survive as its own unit (too long to merge back). It must stay one sentence.
+        val units = Sentences.splitSentences(
+            "J.H. Blom was a prominent Dutch historian who studied the wartime occupation " +
+                "of the Netherlands and its long and contested aftermath.",
+        )
+        assertEquals(1, units.size)
+        assertTrue("initials should stay attached: ${units[0]}", units[0].startsWith("J.H. Blom"))
+    }
+
     @Test fun `splitSentences still merges short dialogue`() {
         val units = Sentences.splitSentences("\"Hi!\" she said. \"Bye,\" he replied.")
         assertEquals(1, units.size)

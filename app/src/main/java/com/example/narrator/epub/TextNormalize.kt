@@ -81,11 +81,17 @@ internal object TextNormalize {
         RegexOption.IGNORE_CASE,
     )
 
-    private val authorYear = Regex(
-        "\\s*\\([A-Z][\\w.'’-]+" +
-            "(?:(?:,| and| &|;)?\\s+(?:et al\\.?|[A-Z][\\w.'’-]+))*" +
+    // One "Author(s), year[, p.N]" citation, WITHOUT the surrounding parens — composed below into
+    // the full pattern so a single parenthetical can carry several, semicolon-separated:
+    // "(Smith, 2020; Jones & Lee, 2018, p. 9; Brown et al., 2021)".
+    private const val AUTHOR_YEAR_UNIT =
+        "[A-Z][\\w.'’-]+" +
+            "(?:(?:,| and| &) [A-Z][\\w.'’-]+| et al\\.?)*" +
             ",?\\s+(?:1[5-9]\\d\\d|20\\d\\d)[a-z]?" +
-            "(?:,\\s*pp?\\.?\\s*\\d+(?:[-–]\\d+)?)?\\)",
+            "(?:,\\s*pp?\\.?\\s*\\d+(?:[-–]\\d+)?)?"
+
+    private val authorYear = Regex(
+        "\\s*\\($AUTHOR_YEAR_UNIT(?:;\\s*$AUTHOR_YEAR_UNIT)*\\)",
     )
 
     private val bracketRef = Regex("\\s*\\[\\d+(?:\\s*[-–,]\\s*\\d+)*\\]")
