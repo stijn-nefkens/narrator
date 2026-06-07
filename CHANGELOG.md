@@ -3,6 +3,28 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.20.0 — 2026-06-02
+
+Reading-quality batch. Bumps `ParsedBookCache.PARSER_VERSION` 1 → 2, so every
+book re-parses once on first open after updating (then it's disk-cached again).
+
+- **Pause on audio becoming noisy** (`NarrationService`): a receiver for
+  `ACTION_AUDIO_BECOMING_NOISY` pauses playback when headphones are unplugged, a
+  Bluetooth device disconnects, or output reroutes to the speaker. Audio-focus
+  loss (calls etc.) is still handled separately in `Narrator`.
+- **Multi-citation stripping** (`TextNormalize`): a single Author-year unit is
+  composed and matched one-or-more times, semicolon-separated, inside one
+  parenthetical — "(Smith, 2020; Jones, 2018)", "(Brown et al., 2021; Smith &
+  Lee, 2019, p. 9)".
+- **Stricter figure/table caption drop** (`PdfParser.looksLikeImageCaption`): a
+  paragraph starting "Figure 4.2 <Capitalised label>" (or a bare "Figure 4.2")
+  is dropped; prose that continues with a lowercase word ("Figure 4.2 shows…",
+  "…was redrawn…") is kept. Replaces the old length-capped heuristic.
+- **Name-initial shielding** (`Sentences`): the period between single-capital
+  initials ("J.H. Blom", "J. Blom") is swapped for a private-use placeholder
+  around BreakIterator and restored after, so the name isn't split into chunks.
+- **Author line centered** in the Player.
+
 ## 0.19.2 — 2026-06-02
 
 - **Pause-at-sentence-boundary replay fixed** (`Narrator.onChunkComplete`):

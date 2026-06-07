@@ -1,0 +1,12 @@
+Reading-quality improvements.
+
+- Playback now pauses when you unplug headphones or disconnect a
+  Bluetooth speaker, instead of switching to the phone speaker.
+- Inline references like "(Smith, 2020; Jones, 2018)" are now removed,
+  including lists of several citations in one set of brackets.
+- Figure and table captions ("Figure 4.2 The map of ...") are skipped
+  more reliably, while sentences that merely refer to a figure are kept.
+- Names with initials like "J.H. Blom" are no longer split mid-name.
+- The author name is now centered on the player screen.
+
+Note: each book re-parses once on first open after this update.
