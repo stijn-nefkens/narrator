@@ -1,7 +1,7 @@
 package com.example.narrator.ui.player
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import com.example.narrator.CoverCache
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.widget.Toast
@@ -119,6 +119,7 @@ class PlayerFragment : Fragment() {
 
     override fun onDestroyView() {
         stopTicking()
+        coverBound = false  // the next view is fresh — bind its cover again
         super.onDestroyView()
         _binding = null
     }
@@ -185,14 +186,7 @@ class PlayerFragment : Fragment() {
             chapterTitle,
         )
 
-        val bitmap = loaded.coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
-        if (bitmap != null) {
-            binding.playerCover.setImageBitmap(bitmap)
-            applyCoverTint(bitmap)
-        } else {
-            binding.playerCover.setImageResource(R.drawable.ic_book_placeholder)
-            binding.playerLoaded.background = null
-        }
+        bindCover(loaded.coverPath)
 
         binding.playerPlayPause.setIconResource(
             if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
@@ -290,6 +284,24 @@ class PlayerFragment : Fragment() {
     private fun updateProgressText(current: Int, total: Int) {
         val pct = if (total <= 0) 0 else (current.toDouble() / total * 100).toInt().coerceIn(0, 100)
         binding.playerProgressText.text = getString(R.string.library_progress_format, pct)
+    }
+
+    /** Cover path currently bound, so per-sentence renders skip the image + Palette work. */
+    private var boundCoverPath: String? = null
+    private var coverBound = false
+
+    private fun bindCover(path: String?) {
+        if (coverBound && path == boundCoverPath) return
+        boundCoverPath = path
+        coverBound = true
+        val bitmap = CoverCache.get(path)
+        if (bitmap != null) {
+            binding.playerCover.setImageBitmap(bitmap)
+            applyCoverTint(bitmap)
+        } else {
+            binding.playerCover.setImageResource(R.drawable.ic_book_placeholder)
+            binding.playerLoaded.background = null
+        }
     }
 
     private fun applyCoverTint(bitmap: Bitmap) {

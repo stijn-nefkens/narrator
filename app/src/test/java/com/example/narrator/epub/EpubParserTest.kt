@@ -185,6 +185,57 @@ class EpubParserTest {
         assertEquals("image/png", book.coverMimeType)
     }
 
+    /** Manifest hrefs are URLs: a spine file named "chapter 1.xhtml" is referenced as
+     *  "chapter%201.xhtml". It used to be looked up verbatim and silently dropped. */
+    private fun escapedHrefEpub(): ByteArray = EpubBuilder()
+        .add("META-INF/container.xml", containerXml("OEBPS/content.opf"))
+        .add(
+            "OEBPS/content.opf",
+            packageXml(
+                title = "Escaped",
+                creator = "Author",
+                manifest = """
+                    <item id="c1" href="chapter%201.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c2" href="caf%C3%A9+bar.xhtml" media-type="application/xhtml+xml"/>
+                """.trimIndent(),
+                spine = """<itemref idref="c1"/><itemref idref="c2"/>""",
+            ),
+        )
+        .add("OEBPS/chapter 1.xhtml", xhtml("<p>Spaced file name body.</p>"))
+        .add("OEBPS/café+bar.xhtml", xhtml("<p>Accented plus file body.</p>"))
+        .build()
+
+    @Test
+    fun `percent-escaped manifest hrefs resolve to the real zip entries`() {
+        val text = EpubParser.parse(ByteArrayInputStream(escapedHrefEpub()))
+            .chapters.flatMap { it.chunks }.joinToString(" ")
+        assertTrue(text, text.contains("Spaced file name body"))
+        assertTrue(text, text.contains("Accented plus file body"))
+    }
+
+    @Test
+    fun `file-based parse reads lazily and matches the stream parse`() {
+        val tmp = java.io.File.createTempFile("escaped", ".epub")
+        try {
+            tmp.writeBytes(escapedHrefEpub())
+            val fromFile = EpubParser.parse(tmp)
+            val fromStream = EpubParser.parse(ByteArrayInputStream(escapedHrefEpub()))
+            assertEquals(fromStream.chapters, fromFile.chapters)
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
+    fun `percentDecode handles utf8, keeps plus and malformed escapes`() {
+        assertEquals("chapter 1.xhtml", Paths.percentDecode("chapter%201.xhtml"))
+        assertEquals("café", Paths.percentDecode("caf%C3%A9"))
+        assertEquals("a+b", Paths.percentDecode("a+b"))
+        assertEquals("100%", Paths.percentDecode("100%"))
+        assertEquals("%zz%-1", Paths.percentDecode("%zz%-1"))
+        assertEquals("plain", Paths.percentDecode("plain"))
+    }
+
     // --- fixture helpers --------------------------------------------------
 
     private fun simpleEpub3(): ByteArray {

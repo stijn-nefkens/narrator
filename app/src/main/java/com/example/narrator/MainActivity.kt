@@ -3,7 +3,6 @@ package com.example.narrator
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -199,9 +198,7 @@ class MainActivity : AppCompatActivity() {
             state.position.chapterIndex + 1,
             loaded.chapterTitles.size,
         )
-        val bitmap = loaded.coverPath?.let {
-            runCatching { BitmapFactory.decodeFile(it) }.getOrNull()
-        }
+        val bitmap = CoverCache.get(loaded.coverPath)
         if (bitmap != null) binding.miniCover.setImageBitmap(bitmap)
         else binding.miniCover.setImageResource(R.drawable.ic_book_placeholder)
         binding.miniPlay.setIconResource(

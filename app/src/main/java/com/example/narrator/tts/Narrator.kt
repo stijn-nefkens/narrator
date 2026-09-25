@@ -124,9 +124,17 @@ class Narrator(
      *  [parseCache] that survives process death, so a cold-start open isn't a fresh parse. */
     private val parsedCacheDir = File(context.filesDir, "parsed-cache")
 
-    // Running totals used to estimate remaining time. Reset on book load.
-    private var statsCompletedMs: Long = 0L
+    // Running totals used to estimate remaining time. Reset on book load. Durations are stored
+    // NORMALISED TO 1.0x (wall-clock play time × the speed it played at) so samples taken at
+    // different speeds are comparable and the estimate can divide by the current speed once.
+    private var statsCompletedMs1x: Long = 0L
     private var statsCompletedChunks: Int = 0
+    /** The current sentence's timing sample is unusable (it was paused mid-way, so its wall time
+     *  includes the pause or, after resume, covers only part of it). Cleared per sentence. */
+    private var statsSampleTainted = false
+
+    /** Set when the TTS engine failed to initialise; play() then reports instead of waiting. */
+    private var ttsInitFailed = false
 
     // Audio focus: pause playback when something else takes audio (call, alarm, assistant),
     // resume when we get focus back from a transient loss.
@@ -174,6 +182,7 @@ class Narrator(
 
     private fun createTts() {
         ttsReady = false
+        ttsInitFailed = false
         // Drop the previous pipeline; it holds a MediaPlayer + listener bound to the old TTS.
         pipeline?.release()
         pipeline = null
@@ -182,6 +191,8 @@ class Narrator(
             context.applicationContext,
             { status ->
                 ttsReady = status == TextToSpeech.SUCCESS
+                ttsInitFailed = !ttsReady
+                if (!ttsReady) onTtsInitFailed()
                 if (ttsReady) {
                     val readyTts = tts ?: return@TextToSpeech
                     readyTts.language = Locale.US
@@ -204,6 +215,19 @@ class Narrator(
             },
             enginePkg,
         )
+    }
+
+    /** The engine refused to start (not installed, or — common with a sideloaded sherpa-onnx —
+     *  installed but disabled). Previously a pending play just sat at isPlaying = true with no
+     *  audio; now we drop out of "playing" and surface the Voice setup Snackbar. */
+    private fun onTtsInitFailed() {
+        android.util.Log.w("Narrator", "TTS engine failed to initialise")
+        if (pendingPlay || _state.value.isPlaying) {
+            pendingPlay = false
+            pausedByFocusLoss = false
+            abandonAudioFocus()
+            _state.value = _state.value.copy(isPlaying = false, engineError = ENGINE_INIT_ERROR)
+        }
     }
 
     private fun applyStoredVoice() {
@@ -244,6 +268,8 @@ class Narrator(
         // NarratorState so the UI shows the paused state, and surface a one-shot error
         // message — the Player UI consumes this with a Snackbar pointing at Voice setup.
         suspendSleepCountdown()
+        pausedByFocusLoss = false
+        abandonAudioFocus()
         _state.value = _state.value.copy(
             isPlaying = false,
             engineError = "TTS engine isn't responding. Check Voice setup.",
@@ -327,7 +353,7 @@ class Narrator(
             speed = startSpeed,
         )
         updateCurrentTexts()
-        statsCompletedMs = 0L
+        statsCompletedMs1x = 0L
         statsCompletedChunks = 0
         // Start prefetching as soon as the book is loaded so the first chunk is already
         // synthesised by the time the user presses play.
@@ -516,11 +542,8 @@ class Narrator(
     fun remainingMs(): Long {
         val s = _state.value
         val loaded = s.loaded ?: return 0L
-        if (statsCompletedChunks < 3) return 0L
-        val avgMsPerChunk = statsCompletedMs / statsCompletedChunks
         val remainingChunks = (loaded.totalChunks - s.position.globalChunk).coerceAtLeast(0)
-        val raw = remainingChunks.toLong() * avgMsPerChunk
-        return (raw / s.speed.coerceAtLeast(0.1f)).toLong()
+        return estimateRemainingMs(statsCompletedMs1x, statsCompletedChunks, remainingChunks, s.speed)
     }
 
     private fun primeFromCurrent(autoplay: Boolean) {
@@ -663,16 +686,15 @@ class Narrator(
     fun togglePlayPause() {
         val s = _state.value
         if (s.loaded == null) return
+        // An explicit play/pause supersedes a pending focus-loss auto-resume: otherwise pausing
+        // during a transient interruption kept our focus claim and GAIN resumed playback anyway.
+        pausedByFocusLoss = false
         if (s.isPlaying) pause() else play()
     }
 
     private fun play() {
         val s = _state.value
-        if (s.loaded == null) return
-        if (!requestAudioFocus()) {
-            // Couldn't get focus (rare — usually only fails during an active call).
-            return
-        }
+        if (s.loaded == null || !canStartPlayback()) return
         _state.value = s.copy(isPlaying = true)
         resumeSleepCountdown()
         NarrationService.start(context)
@@ -692,9 +714,20 @@ class Narrator(
         }
     }
 
+    /** Preconditions for play(): a working engine (else surface the Voice setup error) and audio
+     *  focus (rarely refused — usually only during an active call). */
+    private fun canStartPlayback(): Boolean {
+        if (ttsInitFailed) {
+            _state.value = _state.value.copy(isPlaying = false, engineError = ENGINE_INIT_ERROR)
+            return false
+        }
+        return requestAudioFocus()
+    }
+
     private fun pause() {
         pipeline?.pause()
         pendingPlay = false
+        statsSampleTainted = true
         _state.value = _state.value.copy(isPlaying = false)
         suspendSleepCountdown()
         // Only abandon focus on a "real" pause — if we paused due to a transient loss we want
@@ -847,6 +880,31 @@ class Narrator(
             return a == b || a.contains(b) || b.contains(a)
         }
 
+        const val ENGINE_INIT_ERROR = "TTS engine couldn't start. Check Voice setup."
+
+        /** Minimum completed sentences before a remaining-time estimate is shown. */
+        private const val MIN_TIMING_SAMPLES = 3
+        /** Floor on the speed divisor so a bogus speed can't blow the estimate up. */
+        private const val MIN_SPEED = 0.1f
+
+        /**
+         * Remaining listening time at [speed], from [samplesMs1x] total play time of [sampleCount]
+         * finished sentences, normalised to 1.0x. Returns 0 until there are enough samples.
+         * The samples must be normalised: dividing already-sped-up wall time by the speed again
+         * (the old code) showed ~¼ of the real time at 2x.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun estimateRemainingMs(
+            samplesMs1x: Long,
+            sampleCount: Int,
+            remainingChunks: Int,
+            speed: Float,
+        ): Long {
+            if (sampleCount < MIN_TIMING_SAMPLES || remainingChunks <= 0) return 0L
+            val avgMs1x = samplesMs1x.toDouble() / sampleCount
+            return (remainingChunks * avgMs1x / speed.coerceAtLeast(MIN_SPEED)).toLong()
+        }
+
         /** Pipeline position id for [p] — one per sentence. */
         internal fun utteranceIdFor(p: Position): String = "n_${p.chapterIndex}_${p.chunkIndex}"
 
@@ -895,8 +953,9 @@ class Narrator(
         val current = chunkTextAt(s.position).orEmpty()
         val nextPos = advanceChunk(loaded, s.position, 1)
         val next = if (nextPos != s.position) chunkTextAt(nextPos).orEmpty() else ""
-        // New sentence on screen → restart the monotonic highlight floor.
+        // New sentence on screen → restart the monotonic highlight floor and timing sample.
         highlightFloorChars = 0
+        statsSampleTainted = false
         _state.value = s.copy(currentText = current, nextText = next, currentChunkStartedAt = 0L)
     }
 
@@ -909,55 +968,54 @@ class Narrator(
         // just-finished sentence while the pipeline had moved on — so resuming re-primed and
         // REPLAYED that sentence. Advancing unconditionally keeps the two in sync; while paused
         // nothing starts playing (the prefetch below just banks audio) until the user resumes.
-        // Record timing for remainingMs() before any state changes.
-        if (s.currentChunkStartedAt > 0L) {
-            val playMs = SystemClock.elapsedRealtime() - s.currentChunkStartedAt
-            if (playMs in 100L..30_000L) {
-                statsCompletedMs += playMs
-                statsCompletedChunks++
-            }
-        }
+        recordTimingSample(s)
         val nextPos = advanceChunk(loaded, s.position, 1)
         if (nextPos == s.position) {
             // End of book: stop and auto-mark finished so the library shows 100% (the playhead
             // only ever reaches the last sentence index = ~99%, so without this a fully-read book
-            // sticks below 100). Mirrors the manual "mark as finished" toggle.
-            _state.value = s.copy(isPlaying = false)
-            persistBookmark()
+            // sticks below 100). Mirrors the manual "mark as finished" toggle. A real pause() so
+            // audio focus is released too (it used to be held after the book ended).
+            if (s.isPlaying) pause() else persistBookmark()
             scope.launch { repository.setFinished(loaded.bookId, true) }
             return
         }
         val crossedChapter = nextPos.chapterIndex != s.position.chapterIndex
-        // Sleep timer "End of chapter": pause at the boundary, then clear the timer.
-        if (crossedChapter && s.sleepTimer is SleepTimer.EndOfChapter) {
-            _state.value = s.copy(
-                position = nextPos,
-                isPlaying = false,
-                sleepTimer = SleepTimer.Off,
-            )
-            pipeline?.pause()
-            persistBookmark()
-            return
-        }
         // The next chunk was prefetched (and, when playing, the engine is already speaking it).
-        // Move state forward and top the prefetch buffer back up with one more chunk at the tail.
+        // Move state forward; the caption, prefetch top-up and bookmark below run on EVERY path —
+        // the end-of-chapter sleep branch used to return early and skip them, leaving the old
+        // chapter's last sentence on screen through the whole first sentence after resume.
         _state.value = s.copy(position = nextPos)
-        updateCurrentTexts()
-        // If this completion landed while paused (the boundary race above), the pause() call
-        // already wrote a bookmark at the OLD position — refresh it so a close-while-paused
-        // resumes at the next sentence, not the one that just finished.
-        if (!s.isPlaying) persistBookmark()
-        val tail = positionAhead(nextPos, PREFETCH_DEPTH)
-        if (tail != null) {
-            chunkTextAt(tail)?.let {
-                // Tail sits PREFETCH_DEPTH sentences ahead — a full buffer — so read it whole.
-                pipeline?.queueSentence(
-                    segmentsFor(it, Sentences.budgetForDepth(PREFETCH_DEPTH)),
-                    utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail),
-                )
-            }
+        if (crossedChapter && s.sleepTimer is SleepTimer.EndOfChapter) {
+            // Sleep timer "End of chapter": pause at the boundary (releasing focus), clear timer.
+            _state.value = _state.value.copy(sleepTimer = SleepTimer.Off)
+            if (s.isPlaying) pause()
         }
+        updateCurrentTexts()
+        queuePrefetchTail(nextPos)
+        // Also covers a completion that landed while paused: pause() had written the OLD
+        // position, so a close-while-paused would otherwise resume on the finished sentence.
         persistBookmark()
+    }
+
+    /** Record the just-finished sentence's play time for [remainingMs], normalised to 1.0x. */
+    private fun recordTimingSample(s: NarratorState) {
+        if (s.currentChunkStartedAt <= 0L || statsSampleTainted) return
+        val playMs = SystemClock.elapsedRealtime() - s.currentChunkStartedAt
+        if (playMs in 100L..30_000L) {
+            statsCompletedMs1x += (playMs * s.speed).toLong()
+            statsCompletedChunks++
+        }
+    }
+
+    /** Top the prefetch buffer back up with the sentence PREFETCH_DEPTH ahead of [head]. */
+    private fun queuePrefetchTail(head: Position) {
+        val tail = positionAhead(head, PREFETCH_DEPTH) ?: return
+        val text = chunkTextAt(tail) ?: return
+        // Tail sits PREFETCH_DEPTH sentences ahead — a full buffer — so read it whole.
+        pipeline?.queueSentence(
+            segmentsFor(text, Sentences.budgetForDepth(PREFETCH_DEPTH)),
+            utteranceId(tail), tail.chapterIndex, isChapterTitlePosition(tail),
+        )
     }
 
     private fun persistBookmark() {
@@ -998,7 +1056,7 @@ class Narrator(
             "pdf" -> {
                 val range = if (book.pageRangeStart > 0 && book.pageRangeEnd >= book.pageRangeStart)
                     book.pageRangeStart..book.pageRangeEnd else null
-                PdfParser.parse(file, range)
+                PdfParser.parse(file, range, includeCover = false)
             }
             else -> EpubParser.parse(file)
         }

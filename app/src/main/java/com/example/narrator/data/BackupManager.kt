@@ -2,6 +2,7 @@ package com.example.narrator.data
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.database.sqlite.transaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -73,11 +74,44 @@ class BackupManager(
 
             replaceDir(repository.epubDir, File(staging, "epubs"))
             replaceDir(repository.coverDir, File(staging, "covers"))
+            relocateStoredPaths()
 
             BackupSummary(r.bookFiles, r.coverFiles)
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /** Point every restored book row at this device's epub/cover directories (see
+     *  [BackupArchive.relocatedPath]). One transaction, so a failure leaves paths untouched. */
+    private fun relocateStoredPaths() {
+        val db = database.writableDatabase
+        db.transaction {
+            query(
+                NarratorDatabase.TABLE_BOOKS,
+                arrayOf(NarratorDatabase.COL_ID, NarratorDatabase.COL_EPUB_PATH, NarratorDatabase.COL_COVER_PATH),
+                null, null, null, null, null,
+            ).use { c ->
+                while (c.moveToNext()) {
+                    relocateRow(db, c.getLong(0), c.getString(1), if (c.isNull(2)) null else c.getString(2))
+                }
+            }
+        }
+    }
+
+    private fun relocateRow(
+        db: android.database.sqlite.SQLiteDatabase,
+        id: Long,
+        epubPath: String,
+        coverPath: String?,
+    ) {
+        val values = android.content.ContentValues().apply {
+            put(NarratorDatabase.COL_EPUB_PATH, BackupArchive.relocatedPath(epubPath, repository.epubDir))
+            coverPath?.let {
+                put(NarratorDatabase.COL_COVER_PATH, BackupArchive.relocatedPath(it, repository.coverDir))
+            }
+        }
+        db.update(NarratorDatabase.TABLE_BOOKS, values, "${NarratorDatabase.COL_ID} = ?", arrayOf(id.toString()))
     }
 
     private fun replaceDir(target: File, sourceOrNull: File) {

@@ -180,7 +180,7 @@
     <ID>SpreadOperator:FilePipeline.kt$FilePipeline.Companion$(*TRAILING_NOISE_CHARS)</ID>
     <ID>SwallowedException:PdfParser.kt$PdfParser$e: InvalidPasswordException</ID>
     <ID>ThrowsCount:Container.kt$Container$fun rootfilePath(zip: ZipReader): String</ID>
-    <ID>ThrowsCount:PdfParser.kt$PdfParser$fun parse(input: InputStream, pageRange: IntRange? = null): Book</ID>
+    <ID>ThrowsCount:PdfParser.kt$PdfParser$fun parse(input: InputStream, pageRange: IntRange? = null, includeCover: Boolean = true): Book</ID>
     <ID>TooGenericExceptionCaught:BookImporter.kt$BookImporter$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EpubParser.kt$EpubParser$e: Exception</ID>
     <ID>TooGenericExceptionCaught:FilePipeline.kt$FilePipeline$e: Exception</ID>

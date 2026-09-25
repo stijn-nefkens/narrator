@@ -42,10 +42,10 @@ import java.util.Locale
  */
 object PdfParser {
 
-    fun parse(file: File, pageRange: IntRange? = null): Book =
-        FileInputStream(file).use { parse(it, pageRange) }
+    fun parse(file: File, pageRange: IntRange? = null, includeCover: Boolean = true): Book =
+        FileInputStream(file).use { parse(it, pageRange, includeCover) }
 
-    fun parse(input: InputStream, pageRange: IntRange? = null): Book {
+    fun parse(input: InputStream, pageRange: IntRange? = null, includeCover: Boolean = true): Book {
         // PDFBox marks any PDF with security handlers as "encrypted" — including the very
         // common case of publisher PDFs that have an owner password (preventing copy/print
         // permission changes) but an EMPTY user password (so anyone can read them). Those
@@ -86,7 +86,9 @@ object PdfParser {
                 throw EpubParseException("Could not extract any readable chapters from this PDF.")
             }
 
-            val cover = renderCover(it, effectiveRange.first - 1)
+            // Rendering + PNG-encoding a page is costly and only import needs it; playback reloads
+            // take the cover from the DB (coverPath), so they pass includeCover = false.
+            val cover = if (includeCover) renderCover(it, effectiveRange.first - 1) else null
 
             return Book(
                 title = it.documentInformation?.title?.takeIf { t -> t.isNotBlank() }

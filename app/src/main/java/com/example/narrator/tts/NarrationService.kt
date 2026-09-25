@@ -11,7 +11,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.graphics.BitmapFactory
+import com.example.narrator.CoverCache
 import android.os.Build
 import android.os.IBinder
 import android.support.v4.media.MediaMetadataCompat
@@ -37,6 +37,7 @@ class NarrationService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var collectorJob: Job? = null
     private var startedForeground = false
+    private var lastMetadataKey: List<Any?>? = null
 
     /** Pause when audio is about to become "noisy" — headphones unplugged, Bluetooth disconnected,
      *  output routed to the speaker. Standard media behaviour so a book doesn't suddenly blast the
@@ -99,7 +100,16 @@ class NarrationService : Service() {
             stopSelf()
             return
         }
-        mediaSession.setMetadata(buildMetadata(state))
+        // Metadata (incl. the cover bitmap) crosses a binder on every set, and state emits at
+        // least once per sentence — only re-send it when something it shows actually changed.
+        val metadataKey = listOf(
+            loaded.title, loaded.author, loaded.coverPath,
+            state.position.chapterIndex, loaded.chapterChunkCounts.getOrNull(state.position.chapterIndex),
+        )
+        if (metadataKey != lastMetadataKey) {
+            mediaSession.setMetadata(buildMetadata(state))
+            lastMetadataKey = metadataKey
+        }
         mediaSession.setPlaybackState(buildPlaybackState(state))
 
         val notification = buildNotification(state)
@@ -126,7 +136,7 @@ class NarrationService : Service() {
 
     private fun buildMetadata(state: NarratorState): MediaMetadataCompat {
         val loaded = state.loaded!!
-        val cover = loaded.coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
+        val cover = CoverCache.get(loaded.coverPath)
         val chapterIndex = state.position.chapterIndex
         val chapterTitle = loaded.chapterTitles.getOrNull(chapterIndex).orEmpty()
         // The notification seekbar fills across the CURRENT CHAPTER, not the whole book — a
@@ -173,7 +183,7 @@ class NarrationService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val cover = loaded.coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
+        val cover = CoverCache.get(loaded.coverPath)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(loaded.title)

@@ -1,6 +1,5 @@
 package com.example.narrator.ui.library
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable

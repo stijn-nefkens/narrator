@@ -113,4 +113,20 @@ class BackupArchiveTest {
         // The malicious entry should NOT have escaped the staging directory.
         assertTrue(!File(staging.parentFile, "escape.txt").exists())
     }
+
+    @Test fun `relocatedPath rebases a foreign device's absolute path onto the current dir`() {
+        val epubDir = tmp.newFolder("epubs")
+        // Written on another user / work profile / applicationId.
+        val stored = "/data/user/10/com.other.app/files/epubs/3f2a.pdf"
+        assertEquals(
+            File(epubDir, "3f2a.pdf").absolutePath,
+            BackupArchive.relocatedPath(stored, epubDir),
+        )
+    }
+
+    @Test fun `relocatedPath is a no-op for a path already in the current dir`() {
+        val coverDir = tmp.newFolder("covers")
+        val stored = File(coverDir, "c.png").absolutePath
+        assertEquals(stored, BackupArchive.relocatedPath(stored, coverDir))
+    }
 }

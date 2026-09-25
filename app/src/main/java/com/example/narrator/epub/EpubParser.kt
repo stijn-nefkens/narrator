@@ -3,15 +3,19 @@ package com.example.narrator.epub
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.io.File
-import java.io.FileInputStream
 import java.io.InputStream
-import java.net.URLDecoder
 import java.util.Locale
 
 object EpubParser {
 
-    fun parse(file: File, locale: Locale = Locale.US): Book =
-        FileInputStream(file).use { parse(it, locale) }
+    fun parse(file: File, locale: Locale = Locale.US): Book {
+        val zip = try {
+            ZipReader.open(file)
+        } catch (e: Exception) {
+            throw EpubParseException("Failed to read EPUB archive", e)
+        }
+        return zip.use { parse(it, locale) }
+    }
 
     fun parse(input: InputStream, locale: Locale = Locale.US): Book {
         val zip = try {
@@ -19,7 +23,10 @@ object EpubParser {
         } catch (e: Exception) {
             throw EpubParseException("Failed to read EPUB archive", e)
         }
+        return zip.use { parse(it, locale) }
+    }
 
+    private fun parse(zip: ZipReader, locale: Locale): Book {
         val opfPath = Container.rootfilePath(zip)
         val opfDir = Paths.parentDir(opfPath)
         val opfXml = zip.readText(opfPath)
@@ -40,7 +47,8 @@ object EpubParser {
             raw.addAll(
                 chaptersForFile(
                     spineHref = href,
-                    spineAbsPath = path,
+                    // Decoded, so it compares equal to the (decoded) body-matter landmark path.
+                    spineAbsPath = Paths.percentDecode(path),
                     spineIndex = spineIndex,
                     xhtml = xhtml,
                     tocByFragment = fragmentsForFile,
@@ -110,7 +118,8 @@ object EpubParser {
         for (entry in tocEntries) {
             val (hrefNoFrag, fragment) = Paths.splitFragment(decode(entry.href))
             val absolute = Paths.resolve(tocDir, hrefNoFrag)
-            val match = spineHrefs.firstOrNull { Paths.resolve(opfDir, it) == absolute } ?: continue
+            // Compare decoded forms on both sides: the manifest may escape a name the TOC doesn't.
+            val match = spineHrefs.firstOrNull { Paths.resolve(opfDir, decode(it)) == absolute } ?: continue
             result.getOrPut(match) { mutableListOf() }.add(fragment to entry.title)
         }
         return result
@@ -239,11 +248,9 @@ object EpubParser {
         return adjusted.flatMap { Sentences.splitSentences(it, locale) }
     }
 
-    private fun decode(s: String): String = try {
-        URLDecoder.decode(s, "UTF-8")
-    } catch (_: Exception) {
-        s
-    }
+    /** Percent-decodes an href. Not URLDecoder: that form-decodes `+` to a space, which broke
+     *  TOC matching for file names containing a literal plus. */
+    private fun decode(s: String): String = Paths.percentDecode(s)
 
     private fun guessMime(href: String): String = when (href.substringAfterLast('.').lowercase()) {
         "jpg", "jpeg" -> "image/jpeg"

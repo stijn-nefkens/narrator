@@ -73,6 +73,16 @@ internal object BackupArchive {
         return ReadSummary(bookFiles, coverFiles)
     }
 
+    /**
+     * Where a book/cover file recorded as [storedPath] in a restored DB lives now: the same file
+     * name inside [currentDir]. The DB stores absolute paths, which embed the ORIGINAL device's
+     * data directory (/data/user/<n>/<applicationId>/files/...). Restoring under another user /
+     * work profile, or after an applicationId change, left every path dangling. The archive only
+     * ever holds flat `epubs/<name>` and `covers/<name>` entries, so the file name is the key.
+     */
+    fun relocatedPath(storedPath: String, currentDir: File): String =
+        File(currentDir, File(storedPath).name).absolutePath
+
     private fun putEntry(zip: ZipOutputStream, name: String, source: File) {
         zip.putNextEntry(ZipEntry(name))
         source.inputStream().use { it.copyTo(zip) }

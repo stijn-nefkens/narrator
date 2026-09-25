@@ -1,6 +1,6 @@
 package com.example.narrator.ui.library
 
-import android.graphics.BitmapFactory
+import com.example.narrator.CoverCache
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -62,8 +62,7 @@ class BookAdapter(
             binding.itemProgressBar.progress = item.progressPercent
             binding.itemLastOpened.text = formatLastOpened(ctx, item.bookmark?.updatedAt)
 
-            val coverPath = item.book.coverPath
-            val bitmap = coverPath?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
+            val bitmap = CoverCache.get(item.book.coverPath)
             if (bitmap != null) {
                 binding.itemCover.setImageBitmap(bitmap)
             } else {

@@ -191,9 +191,21 @@ internal class FilePipeline(
         // Hold off any deferred start (chapter / post-title pause) until the user resumes.
         pendingDelayedStart?.let { handler.removeCallbacks(it) }
         pendingDelayedStart = null
-        if (mpState == MpState.PLAYING) {
-            runCatching { mp.pause() }
-            mpState = MpState.PAUSED
+        when (mpState) {
+            MpState.PLAYING -> {
+                runCatching { mp.pause() }
+                mpState = MpState.PAUSED
+            }
+            // Not started yet: drop the preparation instead of holding a PREPARED player for the
+            // length of the pause — a stale PREPARED MediaPlayer silently drops audio on FP6 /
+            // Android 15. The segment stays at the queue head, so resume() (IDLE branch)
+            // re-prepares it fresh. reset() also cancels a pending prepareAsync callback.
+            MpState.PREPARING, MpState.PREPARED -> {
+                runCatching { mp.reset() }
+                mpState = MpState.IDLE
+                activeChunk = null
+            }
+            else -> Unit
         }
     }
 
