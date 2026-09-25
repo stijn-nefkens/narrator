@@ -1,0 +1,12 @@
+Reliability and battery update.
+
+- Playback stays in sync with the audio and recovers from voice-engine
+  hiccups instead of going silent.
+- Much lighter on the battery with the screen off.
+- Remaining time is correct at every speed.
+- Safe to delete or restore books while one is playing.
+- Sleep-timer fixes; clear message if the voice engine can't start.
+- Some EPUBs that skipped chapters now load fully.
+- Backups restore on another phone.
+
+Each book re-parses once after updating.

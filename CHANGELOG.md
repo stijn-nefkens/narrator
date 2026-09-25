@@ -3,6 +3,67 @@
 All notable changes per release. Newest at top. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.21.0 — 2026-09-25
+
+Reliability batch from a full codebase review. Bumps `ParsedBookCache.PARSER_VERSION`
+2 → 3 (cache string format changed), so every book re-parses once on first open.
+Enables SQLite foreign keys (schema version unchanged at 5).
+
+**Playback correctness**
+- **Startup race** (`NarratorApp`): the auto-load of the last book ran on
+  `Dispatchers.IO` and raced the TTS init callback over the pipeline queue; it now
+  runs on Main via `AppContainer.appScope`.
+- **Position drifting ahead of audio** (`FilePipeline`, `Narrator`): a synth error on
+  a *prefetched* sentence was reported as that sentence's completion immediately.
+  Failed segments are now marked and skipped only at the queue head; Narrator also
+  rejects completions not for the playhead (`isCompletionForPosition`).
+- **Silent "playing" after an engine cascade**: the cascade now tears the pipeline
+  down fully so play re-primes, instead of resuming an orphaned segment and stalling.
+- **Stale PREPARED MediaPlayer**: pausing while a segment was preparing now resets the
+  player instead of holding it PREPARED (the FP6 / Android 15 silent-drop case).
+- **TTS init failure** surfaces the Voice setup Snackbar instead of a silent
+  `isPlaying = true`.
+- **End-of-chapter sleep timer** now updates the caption and prefetch; it, end-of-book
+  and the engine cascade release audio focus. Explicit play/pause cancels a pending
+  focus-loss auto-resume.
+- **Sleep timer leak**: loading another book cancels the countdown coroutine.
+- **Remaining time**: samples are normalised to 1.0× (`estimateRemainingMs`); the old
+  code divided by speed twice (~¼ of the real time at 2×). Paused sentences no longer
+  contribute skewed samples.
+- **Overlapping loads**: a generation counter makes the latest `loadBook` win.
+
+**Battery / performance**
+- The 50 ms highlight tick stops in `onStop` / when the Player tab is hidden (it ran
+  for whole screen-off sessions).
+- `CoverCache`: covers are decoded once, subsampled to ~512 px, instead of full-res on
+  every state change in four places; media-session metadata is only re-sent on change.
+- PDF covers are rendered only at import (`PdfParser` `includeCover`).
+- EPUBs are read lazily through `ZipFile` rather than inflating every entry.
+
+**Data safety**
+- Deleting the loaded book unloads it (`Narrator.forgetBook`); restore unloads first
+  and clears parse caches, so bookmarks can't be written onto the wrong book id.
+- SQLite foreign keys enabled (`onConfigure`) — `ON DELETE CASCADE` now fires.
+- Swipe-delete undo no longer crashes after rotation / theme change.
+- Restore rewrites stored absolute paths onto this device's directories
+  (`BackupArchive.relocatedPath`) and refuses a backup from a newer schema
+  (`sqliteUserVersion`) instead of crash-looping on "Can't downgrade database".
+- `ParsedBookCache` strings are length-prefixed UTF-8 (was `writeUTF`, capped at 64 KB).
+- Auto Backup: cloud backup is settings-only (library exceeds the 25 MB quota);
+  device transfer keeps everything but the parse cache.
+
+**EPUB parsing**
+- Manifest hrefs are percent-decoded on lookup ("chapter%201.xhtml" was dropped), and
+  TOC matching no longer turns a literal `+` into a space.
+
+**Structure / housekeeping**
+- `BookIndex`: one tested implementation of chapter/chunk ↔ global position math,
+  replacing copies in Narrator, PlayerFragment and NarrationService.
+- `ParsedBookStore`: memory LRU → disk cache → parse, extracted from Narrator; pure
+  `applySkipPatterns`.
+- Removed dead code (unused voice-name pref path, `continueThroughChapters`, template
+  example tests and their deps, lifecycle-viewmodel).
+
 ## 0.20.0 — 2026-06-02
 
 Reading-quality batch. Bumps `ParsedBookCache.PARSER_VERSION` 1 → 2, so every
