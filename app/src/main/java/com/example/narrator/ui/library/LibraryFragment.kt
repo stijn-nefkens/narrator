@@ -20,6 +20,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.narrator.AppContainer
 import com.example.narrator.MainActivity
 import com.example.narrator.NarratorApp
 import com.example.narrator.R
@@ -367,8 +368,9 @@ class LibraryFragment : Fragment() {
         AlertDialog.Builder(requireContext())
             .setMessage(R.string.library_delete_selected)
             .setPositiveButton(R.string.library_delete) { _, _ ->
+                val c = container
                 viewLifecycleOwner.lifecycleScope.launch {
-                    ids.forEach { container.bookRepository.deleteBook(it) }
+                    ids.forEach { deleteBook(c, it) }
                     exitSelectionMode()
                 }
             }
@@ -420,16 +422,24 @@ class LibraryFragment : Fragment() {
             pendingDeleteIds.remove(bookId)
             applyFilterSort()
         }
+        // Captured now: onDismissed can run after this fragment's view is destroyed (rotation,
+        // theme switch), when viewLifecycleOwner / requireActivity() would throw. The commit runs
+        // in the app scope so a view teardown can't cancel it halfway.
+        val c = container
         snack.addCallback(object : Snackbar.Callback() {
             override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
                 if (!undone && pendingDeleteIds.remove(bookId)) {
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        container.bookRepository.deleteBook(bookId)
-                    }
+                    c.appScope.launch { deleteBook(c, bookId) }
                 }
             }
         })
         snack.show()
+    }
+
+    /** Deletes a book, first unloading it from the Narrator if it's the one playing. */
+    private suspend fun deleteBook(c: AppContainer, bookId: Long) {
+        c.narrator.forgetBook(bookId)
+        c.bookRepository.deleteBook(bookId)
     }
 
     private fun handlePickedUri(uri: Uri) {

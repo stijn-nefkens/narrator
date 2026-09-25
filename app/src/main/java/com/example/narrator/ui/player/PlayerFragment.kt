@@ -118,10 +118,35 @@ class PlayerFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        highlightHandler.removeCallbacks(highlightTick)
-        synthesisingHandler.removeCallbacks(showSynthesisingRunnable)
+        stopTicking()
         super.onDestroyView()
         _binding = null
+    }
+
+    // The highlight tick reposts itself every 50ms while playing, and render() — the only other
+    // place that cancels it — stops running once the state collection stops at onStop. Without
+    // these hooks it kept ticking for a whole screen-off listening session (and while the Player
+    // tab was merely hidden behind another tab). Collection restarts at onStart and re-emits the
+    // current state, whose render() re-arms the tick.
+    override fun onStop() {
+        stopTicking()
+        super.onStop()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) stopTicking() else if (_binding != null) render(container.narrator.state.value)
+    }
+
+    /** Restart the highlight tick if playing and visible (never while hidden behind a tab). */
+    private fun rearmHighlightTick(state: NarratorState) {
+        highlightHandler.removeCallbacks(highlightTick)
+        if (state.isPlaying && !isHidden) highlightHandler.postDelayed(highlightTick, HIGHLIGHT_INTERVAL_MS)
+    }
+
+    private fun stopTicking() {
+        highlightHandler.removeCallbacks(highlightTick)
+        synthesisingHandler.removeCallbacks(showSynthesisingRunnable)
     }
 
     private fun render(state: NarratorState) {
@@ -198,8 +223,7 @@ class PlayerFragment : Fragment() {
         binding.playerNextText.text = state.nextText
         // Reset highlight for the new chunk, then start ticking if we're playing.
         refreshHighlight()
-        highlightHandler.removeCallbacks(highlightTick)
-        if (state.isPlaying) highlightHandler.postDelayed(highlightTick, HIGHLIGHT_INTERVAL_MS)
+        rearmHighlightTick(state)
 
         // Show "Synthesising…" only if we're playing but the current chunk hasn't started any
         // audio for SYNTHESISING_DELAY_MS. This suppresses the flicker at every chunk transition

@@ -228,7 +228,14 @@ class Narrator(
         scope.launch { onChunkStartPlayback(parsed, now) }
     }
 
-    private fun onPipelineChunkCompleted(@Suppress("UNUSED_PARAMETER") id: String) {
+    private fun onPipelineChunkCompleted(id: String) {
+        // Only the sentence at the playhead may advance the position. A completion for any
+        // other sentence is out of order (the pipeline reports in playback order, so this is a
+        // defensive guard) and would push the caption/bookmark ahead of the audio.
+        if (!isCompletionForPosition(id, _state.value.position)) {
+            android.util.Log.w("Narrator", "ignoring out-of-order completion $id at ${_state.value.position}")
+            return
+        }
         scope.launch { onChunkComplete() }
     }
 
@@ -302,6 +309,12 @@ class Narrator(
         }
 
         pipeline?.stop()
+        // The fresh NarratorState below resets sleepTimer to Off; cancel the countdown job too,
+        // or it keeps running invisibly and later fades out + pauses the newly loaded book.
+        cancelSleepTimerJob()
+        // Switching books stops playback — release focus like a normal pause would.
+        pausedByFocusLoss = false
+        abandonAudioFocus()
         // Per-book remembered speed wins over the global default — readers calibrate speed
         // per book (slow for poetry, fast for filler).
         val startSpeed = if (book.playbackSpeed > 0f) book.playbackSpeed else preferences.defaultSpeed
@@ -387,7 +400,53 @@ class Narrator(
         }
     }
 
+    /**
+     * Forget [bookId] before it is deleted: drop its in-memory and on-disk parse caches, and if
+     * it is the loaded book, unload it — otherwise playback carries on from memory and keeps
+     * writing resume bookmarks for a book row that no longer exists.
+     */
+    fun forgetBook(bookId: Long) {
+        parseCache.remove(bookId)
+        com.example.narrator.data.ParsedBookCache.delete(parsedCacheDir, bookId)
+        if (_state.value.loaded?.bookId == bookId) unload()
+        if (preferences.lastOpenedBookId == bookId) preferences.lastOpenedBookId = -1L
+    }
+
+    /**
+     * Unload before a backup restore swaps the database. Book ids in the restored DB can refer
+     * to different books, so keeping the current book loaded would write its bookmark onto
+     * whichever book now owns that id. Returns the id that was loaded (to reload on failure).
+     */
+    fun unloadForRestore(): Long? {
+        val previous = _state.value.loaded?.bookId
+        unload()
+        preferences.lastOpenedBookId = -1L
+        return previous
+    }
+
+    /** After a successful restore: every parse cache is keyed by (now meaningless) book id. */
+    suspend fun discardParseCaches() {
+        parseCache.clear()
+        withContext(Dispatchers.IO) { parsedCacheDir.deleteRecursively() }
+    }
+
+    private fun unload() {
+        pipeline?.stop()
+        cancelSleepTimerJob()
+        pendingPlay = false
+        pausedByFocusLoss = false
+        abandonAudioFocus()
+        chunksByChapter = emptyList()
+        _state.value = NarratorState(speed = _state.value.speed)
+    }
+
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
+
+    private fun cancelSleepTimerJob() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        pipeline?.setVolume(1f)  // undo any in-progress fade-out
+    }
 
     fun setSleepTimer(option: SleepTimer) {
         sleepTimerJob?.cancel()
@@ -788,6 +847,15 @@ class Narrator(
             return a == b || a.contains(b) || b.contains(a)
         }
 
+        /** Pipeline position id for [p] — one per sentence. */
+        internal fun utteranceIdFor(p: Position): String = "n_${p.chapterIndex}_${p.chunkIndex}"
+
+        /** True if a pipeline completion for position id [id] is for the sentence at [position]
+         *  (the only one allowed to advance the playhead). Pure so the guard is unit-testable. */
+        @androidx.annotation.VisibleForTesting
+        internal fun isCompletionForPosition(id: String?, position: Position): Boolean =
+            id == utteranceIdFor(position)
+
         private fun normalizeForTitle(s: String): String =
             s.lowercase(Locale.US).replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
         /** Length of the gentle volume ramp at the end of a sleep timer. */
@@ -799,7 +867,7 @@ class Narrator(
     private fun chunkTextAt(p: Position): String? =
         chunksByChapter.getOrNull(p.chapterIndex)?.getOrNull(p.chunkIndex)?.takeIf { it.isNotBlank() }
 
-    private fun utteranceId(p: Position): String = "n_${p.chapterIndex}_${p.chunkIndex}"
+    private fun utteranceId(p: Position): String = utteranceIdFor(p)
 
     private data class ParsedId(val chapterIndex: Int, val chunkIndex: Int)
 
@@ -896,12 +964,19 @@ class Narrator(
         val s = _state.value
         val loaded = s.loaded ?: return
         scope.launch {
-            repository.upsertBookmark(
-                bookId = loaded.bookId,
-                chapterIndex = s.position.chapterIndex,
-                chunkIndex = s.position.chunkIndex,
-                globalChunk = s.position.globalChunk,
-            )
+            // With foreign keys enforced, a write racing a delete of this book fails the FK
+            // check — that write is moot, and must not crash the app.
+            runCatching {
+                repository.upsertBookmark(
+                    bookId = loaded.bookId,
+                    chapterIndex = s.position.chapterIndex,
+                    chunkIndex = s.position.chunkIndex,
+                    globalChunk = s.position.globalChunk,
+                )
+            }.onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.w("Narrator", "bookmark write failed for book ${loaded.bookId}", e)
+            }
         }
     }
 

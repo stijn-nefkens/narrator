@@ -25,7 +25,10 @@ class NarratorApp : Application() {
         PDFBoxResourceLoader.init(applicationContext)
         container = AppContainer(this)
         container.preferences.applyTheme()
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        // Main, not IO: loadBook mutates Narrator state and drives the TTS/MediaPlayer pipeline,
+        // which the TTS init callback also touches on Main. Running it on an IO worker raced
+        // that callback on every cold start. The repository does its own IO hops.
+        container.appScope.launch {
             container.bookRepository.refresh()
             // Auto-load the last opened book so the Player isn't empty on cold start.
             val lastId = container.preferences.lastOpenedBookId
@@ -54,6 +57,10 @@ class NarratorApp : Application() {
 
 class AppContainer(app: Application) {
     private val appContext = app.applicationContext
+
+    /** Process-lifetime scope for work that must outlive any screen (e.g. committing a
+     *  swipe-delete after its Snackbar times out on a destroyed view). */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val preferences = AppPreferences(appContext)
     val database = NarratorDatabase(appContext)

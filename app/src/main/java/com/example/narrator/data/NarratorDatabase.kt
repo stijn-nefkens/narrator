@@ -10,6 +10,13 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
     null,
     DATABASE_VERSION,
 ) {
+    /** SQLite leaves foreign keys OFF per connection unless asked; without this the
+     *  ON DELETE CASCADE clauses below never fired and deleting a book orphaned its
+     *  resume bookmark and saved bookmarks. */
+    override fun onConfigure(db: SQLiteDatabase) {
+        db.setForeignKeyConstraintsEnabled(true)
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(SQL_CREATE_BOOKS)
         db.execSQL(SQL_CREATE_BOOKMARKS)

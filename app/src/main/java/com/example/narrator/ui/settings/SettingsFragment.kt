@@ -114,8 +114,13 @@ class SettingsFragment : Fragment() {
 
     private fun performRestore(uri: Uri) {
         viewLifecycleOwner.lifecycleScope.launch {
+            // Unload first: the app-scoped Narrator would otherwise keep the old book loaded and
+            // write its resume bookmark (by id) into the restored DB, where that id may belong
+            // to a different book. Unloading also stops bookmark writes during the DB swap.
+            val previousBookId = container.narrator.unloadForRestore()
             runCatching { container.backupManager.restoreFrom(uri) }
                 .onSuccess { s ->
+                    container.narrator.discardParseCaches()
                     container.bookRepository.refresh()
                     Toast.makeText(
                         requireContext(),
@@ -133,6 +138,8 @@ class SettingsFragment : Fragment() {
                         getString(R.string.restore_failed, e.message ?: "unknown error"),
                         Toast.LENGTH_LONG,
                     ).show()
+                    // The library is untouched on failure — put the previous book back.
+                    previousBookId?.let { container.narrator.loadBook(it) }
                 }
         }
     }

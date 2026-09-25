@@ -308,6 +308,8 @@ internal class FilePipeline(
 
     private fun handleSynthDone(synthUtteranceId: String?) {
         val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
+        // A late onDone for a segment the watchdog already gave up on — keep it skipped.
+        if (chunk.failed) return
         cancelWatchdog(chunk)
         chunk.synthDone = true
         consecutiveSynthErrors = 0
@@ -325,28 +327,32 @@ internal class FilePipeline(
     }
 
     private fun handleSynthError(synthUtteranceId: String?, code: Int) {
-        val chunk = queue.firstOrNull { it.synthId == synthUtteranceId } ?: return
+        // A segment already marked failed has been counted — ignore repeat errors for it.
+        val chunk = queue.firstOrNull { it.synthId == synthUtteranceId && !it.failed } ?: return
         cancelWatchdog(chunk)
         consecutiveSynthErrors++
         Log.w(TAG, "synth_error id=${chunk.id} code=$code consecutive=$consecutiveSynthErrors")
         if (consecutiveSynthErrors >= maxConsecutiveSynthErrors) {
             Log.w(TAG, "synth cascade: halting pipeline to avoid runaway position advance")
-            pause()
-            // Drop the queued attempts so we don't replay these failures the moment the user
-            // resumes after fixing the engine — primeFromCurrent will requeue from the (un-
-            // advanced) position.
-            for (c in queue) runCatching { c.file.delete() }
-            queue.clear()
+            // Full teardown, not just pause: pausing left the MediaPlayer bound to a segment
+            // whose queue had been cleared, so a resume played out that orphan and then stalled
+            // silently (queueSentence refuses an empty queue) while the UI showed "playing".
+            // With the MP idle and the queue empty, Narrator's play() re-primes from the (un-
+            // advanced) position instead.
+            teardown()
+            paused = true
             consecutiveSynthErrors = 0
             onSynthCascadeFailure()
             return
         }
-        // Single-segment failure: skip past the bad segment so playback continues with the next.
-        // Only notify Narrator if this was the sentence's last segment (a position boundary);
-        // a failed mid-sentence segment just drops that fragment of audio.
-        queue.remove(chunk)
+        // Single-segment failure: mark the segment failed and leave it IN PLACE. It is dropped
+        // (and, if it ends its sentence, reported complete) only when it reaches the queue head,
+        // so completions stay in playback order. Removing it immediately — as before — reported
+        // a prefetched sentence complete while an earlier one was still playing, pushing
+        // Narrator's position one sentence ahead of the audio.
+        chunk.failed = true
+        chunk.synthDone = true
         runCatching { chunk.file.delete() }
-        if (chunk.isLastSub) onChunkCompleted(chunk.positionId)
         if (mpState == MpState.IDLE) tryStartNextFromQueue()
     }
 
@@ -356,6 +362,13 @@ internal class FilePipeline(
         if (paused) return
         if (mpState != MpState.IDLE) return
         if (pendingDelayedStart != null) return  // a delayed start is already scheduled
+        // Drop failed segments that have reached the head, reporting a sentence boundary when
+        // one ends there. The callback can pause us (sleep timer at a chapter end) — re-check.
+        while (queue.firstOrNull()?.failed == true) {
+            val dropped = queue.removeFirst()
+            if (dropped.isLastSub) onChunkCompleted(dropped.positionId)
+            if (paused) return
+        }
         val next = queue.firstOrNull() ?: return
         if (!next.synthDone) return  // wait for synth_done
 
@@ -449,13 +462,16 @@ internal class FilePipeline(
         // A chapter title just finished: hold a short beat before the body so the heading reads
         // as its own line. The next chunk is in the same chapter (chunk 1), so the inter-chapter
         // pause in tryStartNextFromQueue won't also fire.
-        val next = queue.firstOrNull()
-        if (titlePause && next != null && next.synthDone && !paused && pendingDelayedStart == null) {
+        val next = queue.firstOrNull()?.takeIf(::isReadyToPlay)
+        if (titlePause && next != null && pendingDelayedStart == null) {
             scheduleDelayedStart(next, TITLE_PAUSE_MS)
             return
         }
         tryStartNextFromQueue()
     }
+
+    /** [chunk] has playable audio and we're not paused. */
+    private fun isReadyToPlay(chunk: PendingChunk): Boolean = chunk.synthDone && !chunk.failed && !paused
 
     private fun applySpeed() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
@@ -513,6 +529,8 @@ internal class FilePipeline(
         val isChapterTitle: Boolean = false,
         var synthId: String? = null,
         var synthDone: Boolean = false,
+        /** Synthesis failed; the segment is skipped (not played) when it reaches the head. */
+        var failed: Boolean = false,
         /** Pending watchdog for this chunk's synthesis (see onSynthWatchdog); null when none armed. */
         var synthWatchdog: Runnable? = null,
         /** How many times synthesis has been re-issued for this chunk after a watchdog timeout. */
