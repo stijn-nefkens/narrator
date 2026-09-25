@@ -42,6 +42,9 @@ JDK 21. JAVA_HOME points at Android Studio's bundled JBR on Windows:
 `C:/Program Files/Android/Android Studio/jbr`. PowerShell users may need to prefix
 with `JAVA_HOME=... ./gradlew ...`.
 
+There is no `local.properties` (it's gitignored), so shells outside Android Studio also
+need `ANDROID_HOME=$LOCALAPPDATA/Android/Sdk` or Gradle fails with "SDK location not found".
+
 ## Phone / device
 
 Development happens on a Fairphone 6 connected over USB. The user has `stay_on_while_plugged_in=7`
@@ -73,10 +76,10 @@ before pushing the tag (`git push origin vX.Y.Z`).
 The user expects engineering-quality commit bodies — explain the *why* and the
 *what changed*, not just the symptom. Existing commit log demonstrates the style.
 
-End every commit with:
+End every commit with a co-author line naming the model that did the work, e.g.:
 
 ```
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
 
 Git identity is set globally to `stijn <stijn.nefkens@aurorasgrid.com>`.
@@ -99,11 +102,22 @@ Commit messages with embedded `"` and multi-line text are fragile on Windows Pow
 - **Material 3 widgets need M3 theme** — MaterialSwitch is invisible under M2.
 - **Sherpa APK installs disabled** — direct APK install can leave sherpa-onnx in
   `enabled=0` state; check with `adb shell dumpsys package com.k2fsa.sherpa.onnx.tts.engine | grep enabled`.
+- **Narrator / FilePipeline are main-thread only** — call `loadBook` etc. from Main
+  (the startup auto-load once ran on IO and raced the TTS init callback).
+- **Narrator is app-scoped and outlives the DB state** — deleting a book must go through
+  `narrator.forgetBook(id)` first; a backup restore must call `unloadForRestore()` before
+  and `discardParseCaches()` after. Otherwise stale bookmarks get written by book id.
+- **Pipeline completions must arrive in playback order** — a failed segment is marked
+  and skipped when it reaches the queue head, never reported early.
+- **Fragments are hide/show, not destroyed** — a hidden fragment stays STARTED and keeps
+  collecting; self-reposting Handler ticks must be stopped in `onStop`/`onHiddenChanged`.
 
 ## Database schema versioning
 
-Current version: 4. Migrations live inline in `NarratorDatabase.onUpgrade`. Bump
+Current version: 5. Migrations live inline in `NarratorDatabase.onUpgrade`. Bump
 `DATABASE_VERSION` and add an `if (oldVersion < N)` block whenever adding columns.
+Foreign keys are enabled in `onConfigure`, so `ON DELETE CASCADE` is live — a write
+referencing a deleted book id throws (Narrator's bookmark writes catch and log this).
 Tests should round-trip a backup with the new schema to catch column-mismatch errors.
 
 ## When the user asks for "QoL"
