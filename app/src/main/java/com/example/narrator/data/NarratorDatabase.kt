@@ -63,7 +63,7 @@ class NarratorDatabase(context: Context) : SQLiteOpenHelper(
 
     companion object {
         private const val DATABASE_NAME = "narrator.db"
-        private const val DATABASE_VERSION = 5
+        internal const val DATABASE_VERSION = 5
 
         const val TABLE_BOOKS = "books"
         const val COL_ID = "id"

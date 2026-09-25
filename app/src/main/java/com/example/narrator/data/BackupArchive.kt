@@ -83,6 +83,40 @@ internal object BackupArchive {
     fun relocatedPath(storedPath: String, currentDir: File): String =
         File(currentDir, File(storedPath).name).absolutePath
 
+    private const val SQLITE_HEADER_BYTES = 100
+    private const val SQLITE_USER_VERSION_OFFSET = 60
+    private val SQLITE_MAGIC = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+
+    /**
+     * The schema version (`PRAGMA user_version`, which SQLiteOpenHelper sets to DATABASE_VERSION)
+     * stored in a SQLite file's header, or null if [dbFile] isn't a SQLite database. Read from the
+     * raw header so a restore can be vetted BEFORE it replaces the live DB: a backup written by a
+     * newer app version would otherwise make SQLiteOpenHelper throw "Can't downgrade database" on
+     * every launch — a crash loop only clearing app data escapes.
+     */
+    fun sqliteUserVersion(dbFile: File): Int? {
+        val header = ByteArray(SQLITE_HEADER_BYTES)
+        val read = if (dbFile.length() < SQLITE_HEADER_BYTES) {
+            0
+        } else {
+            dbFile.inputStream().use { it.readNBytesCompat(header) }
+        }
+        val isSqlite = read == SQLITE_HEADER_BYTES &&
+            header.copyOfRange(0, SQLITE_MAGIC.size).contentEquals(SQLITE_MAGIC)
+        // user_version is a 4-byte big-endian int, which is ByteBuffer's default order.
+        return if (isSqlite) java.nio.ByteBuffer.wrap(header, SQLITE_USER_VERSION_OFFSET, Int.SIZE_BYTES).int else null
+    }
+
+    private fun InputStream.readNBytesCompat(buf: ByteArray): Int {
+        var total = 0
+        while (total < buf.size) {
+            val n = read(buf, total, buf.size - total)
+            if (n < 0) break
+            total += n
+        }
+        return total
+    }
+
     private fun putEntry(zip: ZipOutputStream, name: String, source: File) {
         zip.putNextEntry(ZipEntry(name))
         source.inputStream().use { it.copyTo(zip) }

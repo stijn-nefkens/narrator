@@ -114,6 +114,24 @@ class BackupArchiveTest {
         assertTrue(!File(staging.parentFile, "escape.txt").exists())
     }
 
+    /** A minimal SQLite-shaped file: the 16-byte magic, user_version at offset 60, padding. */
+    private fun fakeSqlite(userVersion: Int): File {
+        val header = ByteArray(4096)
+        "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII).copyInto(header)
+        java.nio.ByteBuffer.wrap(header, 60, 4).putInt(userVersion)
+        return tmp.newFile().apply { writeBytes(header) }
+    }
+
+    @Test fun `sqliteUserVersion reads the schema version from the header`() {
+        assertEquals(5, BackupArchive.sqliteUserVersion(fakeSqlite(5)))
+        assertEquals(42, BackupArchive.sqliteUserVersion(fakeSqlite(42)))
+    }
+
+    @Test fun `sqliteUserVersion rejects non-SQLite and truncated files`() {
+        assertEquals(null, BackupArchive.sqliteUserVersion(tmp.newFile().apply { writeBytes("db".toByteArray()) }))
+        assertEquals(null, BackupArchive.sqliteUserVersion(tmp.newFile().apply { writeBytes(ByteArray(200)) }))
+    }
+
     @Test fun `relocatedPath rebases a foreign device's absolute path onto the current dir`() {
         val epubDir = tmp.newFolder("epubs")
         // Written on another user / work profile / applicationId.

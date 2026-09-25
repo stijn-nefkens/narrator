@@ -250,8 +250,7 @@ class NarrationService : Service() {
             // current chapter — add the chunks before this chapter to get the global index.
             val st = narrator.state.value
             val loaded = st.loaded ?: return narrator.seekToGlobalChunk(pos.toInt())
-            val base = loaded.chapterChunkCounts.take(st.position.chapterIndex).sum()
-            narrator.seekToGlobalChunk(base + pos.toInt())
+            narrator.seekToGlobalChunk(loaded.index.chapterStart(st.position.chapterIndex) + pos.toInt())
         }
     }
 

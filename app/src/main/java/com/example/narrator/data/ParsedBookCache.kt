@@ -27,20 +27,39 @@ internal object ParsedBookCache {
 
     /** Bump when the parsers or [com.example.narrator.epub.TextNormalize] change their output, so
      *  caches written by an older build are rejected and the book is re-parsed once.
-     *  v2: multi-citation stripping, name-initial shielding, stricter figure-caption drop. */
-    const val PARSER_VERSION = 2
+     *  v2: multi-citation stripping, name-initial shielding, stricter figure-caption drop.
+     *  v3: strings are length-prefixed UTF-8 (was DataOutput.writeUTF, capped at 64 KB — one
+     *      oversized unpunctuated "sentence" made the whole write fail silently, so that book
+     *      was re-parsed on every cold open). */
+    const val PARSER_VERSION = 3
+
+    /** Upper bound on a single stored string; guards [readString] against a corrupt length
+     *  prefix allocating a huge array. Far above any real chunk. */
+    private const val MAX_STRING_BYTES = 16 * 1024 * 1024
+
+    private fun DataOutputStream.writeString(s: String) {
+        val bytes = s.toByteArray(Charsets.UTF_8)
+        writeInt(bytes.size)
+        write(bytes)
+    }
+
+    private fun DataInputStream.readString(): String {
+        val len = readInt()
+        require(len in 0..MAX_STRING_BYTES) { "bad string length $len" }
+        return ByteArray(len).also { readFully(it) }.toString(Charsets.UTF_8)
+    }
 
     fun serialize(signature: String, chapters: List<Chapter>): ByteArray {
         val bos = ByteArrayOutputStream()
         DataOutputStream(bos).use { out ->
             out.writeInt(MAGIC)
             out.writeInt(PARSER_VERSION)
-            out.writeUTF(signature)
+            out.writeString(signature)
             out.writeInt(chapters.size)
             for (ch in chapters) {
-                out.writeUTF(ch.title)
+                out.writeString(ch.title)
                 out.writeInt(ch.chunks.size)
-                for (chunk in ch.chunks) out.writeUTF(chunk)
+                for (chunk in ch.chunks) out.writeString(chunk)
             }
         }
         return bos.toByteArray()
@@ -52,16 +71,16 @@ internal object ParsedBookCache {
         DataInputStream(ByteArrayInputStream(bytes)).use { input ->
             if (input.readInt() != MAGIC) return null
             if (input.readInt() != PARSER_VERSION) return null
-            if (input.readUTF() != expectedSignature) return null
+            if (input.readString() != expectedSignature) return null
             val chapterCount = input.readInt()
             if (chapterCount < 0) return null
             val chapters = ArrayList<Chapter>(chapterCount)
             repeat(chapterCount) {
-                val title = input.readUTF()
+                val title = input.readString()
                 val chunkCount = input.readInt()
                 if (chunkCount < 0) return null
                 val chunks = ArrayList<String>(chunkCount)
-                repeat(chunkCount) { chunks.add(input.readUTF()) }
+                repeat(chunkCount) { chunks.add(input.readString()) }
                 chapters.add(Chapter(title, chunks))
             }
             chapters

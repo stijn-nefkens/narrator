@@ -36,10 +36,6 @@ class AppPreferences(context: Context) {
         get() = ThemeMode.valueOf(prefs.getString(KEY_THEME, ThemeMode.SYSTEM.name)!!)
         set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
 
-    var continueThroughChapters: Boolean
-        get() = prefs.getBoolean(KEY_CONTINUE, true)
-        set(value) = prefs.edit().putBoolean(KEY_CONTINUE, value).apply()
-
     /** Id of the last book that was loaded into the player, or -1 if none. */
     var lastOpenedBookId: Long
         get() = prefs.getLong(KEY_LAST_BOOK, -1L)
@@ -66,7 +62,6 @@ class AppPreferences(context: Context) {
         private const val KEY_PITCH = "pitch"
         private const val KEY_SKIP = "skip_increment"
         private const val KEY_THEME = "theme"
-        private const val KEY_CONTINUE = "continue_through_chapters"
         private const val KEY_LAST_BOOK = "last_opened_book_id"
         private const val KEY_LIB_SORT = "library_sort_order"
         private const val KEY_SPEED_TOOLTIP = "speed_tooltip_shown"

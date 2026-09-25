@@ -40,6 +40,22 @@ class ParsedBookCacheTest {
         assertEquals(tricky, ParsedBookCache.deserialize(bytes, "sig"))
     }
 
+    @Test fun `round-trips a chunk larger than 64 KB`() {
+        // writeUTF capped strings at 65535 bytes; one long unpunctuated PDF "sentence" made the
+        // whole cache write fail, so the book re-parsed on every cold open.
+        val huge = "word ".repeat(20_000) + "and an emoji 📖 at the end."
+        val big = listOf(Chapter("Big", listOf("Before.", huge, "After.")))
+        val bytes = ParsedBookCache.serialize("sig", big)
+        assertEquals(big, ParsedBookCache.deserialize(bytes, "sig"))
+    }
+
+    @Test fun `rejects a corrupt string length instead of allocating it`() {
+        val bytes = ParsedBookCache.serialize("sig", chapters)
+        // Overwrite the signature's length prefix (after magic + version) with a huge value.
+        bytes[8] = 0x7F; bytes[9] = -1; bytes[10] = -1; bytes[11] = -1
+        assertNull(ParsedBookCache.deserialize(bytes, "sig"))
+    }
+
     @Test fun `writes and reads back via a file`() {
         val dir = tmp.newFolder("parsed-cache")
         ParsedBookCache.write(dir, bookId = 7L, signature = "sig-7", chapters = chapters)

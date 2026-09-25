@@ -33,7 +33,6 @@ android {
         versionCode = 27
         versionName = "0.20.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -94,7 +93,6 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.activity.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.recyclerview)
     implementation(libs.kotlinx.coroutines.android)
@@ -102,6 +100,4 @@ dependencies {
     implementation(libs.androidx.palette.ktx)
     implementation(libs.pdfbox.android)
     testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.junit)
 }

@@ -1,19 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android 12+ backup rules.
+
+   Cloud backup: settings only. The library (imported EPUB/PDF files + covers) easily exceeds the
+   25 MB Auto Backup quota, and going over it makes the WHOLE backup fail — settings included.
+   Backing up the database without the book files would restore a library of dangling rows, so
+   the DB is left out too. Users move libraries with the in-app backup (Settings → Backup).
+
+   Device-to-device transfer has no quota: take everything except the parse cache, which is
+   regenerated on first open.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="sharedpref" path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="parsed-cache/" />
     </device-transfer>
-    -->
 </data-extraction-rules>

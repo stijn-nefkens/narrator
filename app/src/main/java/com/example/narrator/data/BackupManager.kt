@@ -62,6 +62,12 @@ class BackupManager(
             val inStream = context.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Could not open source")
             val r = inStream.use { BackupArchive.read(it, staging) }
+            // Vet the staged DB before touching the live one (see sqliteUserVersion).
+            val version = BackupArchive.sqliteUserVersion(File(staging, "narrator.db"))
+                ?: error("Backup's narrator.db isn't a valid database")
+            check(version <= NarratorDatabase.DATABASE_VERSION) {
+                "Backup is from a newer version of Narrator — update the app first"
+            }
 
             // Swap into place. Close the open DB handle first so we can overwrite the file.
             database.close()

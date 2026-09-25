@@ -11,9 +11,7 @@ import com.example.narrator.data.BookEntity
 import com.example.narrator.data.BookRepository
 import com.example.narrator.data.SkipIncrement
 import com.example.narrator.epub.Book
-import com.example.narrator.epub.EpubParser
 import com.example.narrator.epub.Sentences
-import com.example.narrator.pdf.PdfParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +19,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -36,6 +33,9 @@ data class LoadedBook(
     val chapterChunkCounts: List<Int>,
     val totalChunks: Int,
 ) {
+    /** Position arithmetic over this book's chapters. Derived, so not part of equals/copy args. */
+    val index: BookIndex = BookIndex(chapterChunkCounts)
+
     companion object {
         /**
          * Builds a [LoadedBook] from the database row [book] and the parsed file [parsed].
@@ -107,22 +107,13 @@ class Narrator(
     private var chunksByChapter: List<List<String>> = emptyList()
     private var pipeline: FilePipeline? = null
 
-    /**
-     * LRU cache of parsed books, keyed by bookId. Re-opening a recently-read book skips the
-     * (multi-second, for large PDFs) parse entirely, so the switch is near-instant. Entries are
-     * invalidated by [cacheSignature], so a skip-pattern edit, page-range change, or file
-     * replacement re-parses. Finished books are never cached (the user has moved on). All access
-     * is on the main thread — both loadBook and warmRecentBooks write the map on Main.
-     */
-    private data class CachedParse(val signature: String, val book: Book)
-    private val parseCache = object : LinkedHashMap<Long, CachedParse>(8, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, CachedParse>): Boolean =
-            size > MAX_PARSE_CACHE
-    }
+    /** Parsed content: memory LRU → disk cache → full parse. */
+    private val books = ParsedBookStore(File(context.filesDir, "parsed-cache"))
 
-    /** Disk home for [com.example.narrator.data.ParsedBookCache] — the persistent twin of
-     *  [parseCache] that survives process death, so a cold-start open isn't a fresh parse. */
-    private val parsedCacheDir = File(context.filesDir, "parsed-cache")
+    /** Bumped by every loadBook / unload. A load that resumes from a suspension to find the
+     *  generation moved on was superseded (a later tap, a delete, a restore) and must not apply
+     *  its result — otherwise two quick taps could land on whichever parse finished LAST. */
+    private var loadGeneration = 0
 
     // Running totals used to estimate remaining time. Reset on book load. Durations are stored
     // NORMALISED TO 1.0x (wall-clock play time × the speed it played at) so samples taken at
@@ -196,7 +187,6 @@ class Narrator(
                 if (ttsReady) {
                     val readyTts = tts ?: return@TextToSpeech
                     readyTts.language = Locale.US
-                    applyStoredVoice()
                     // Synthesise at 1.0x; speed is applied at playback via MediaPlayer.
                     readyTts.setSpeechRate(1.0f)
                     readyTts.setPitch(preferences.pitch)
@@ -228,12 +218,6 @@ class Narrator(
             abandonAudioFocus()
             _state.value = _state.value.copy(isPlaying = false, engineError = ENGINE_INIT_ERROR)
         }
-    }
-
-    private fun applyStoredVoice() {
-        val stored = VoicePreferences.voiceName(context) ?: return
-        val match = runCatching { tts?.voices }.getOrNull()?.firstOrNull { it.name == stored } ?: return
-        runCatching { tts?.voice = match }
     }
 
     /** Recreates the TTS instance after the user switches engines in Voice Setup. */
@@ -284,55 +268,20 @@ class Narrator(
     }
 
     suspend fun loadBook(bookId: Long) {
+        val generation = ++loadGeneration
         val book = repository.getBook(bookId) ?: return
-        preferences.lastOpenedBookId = bookId
         val bookmark = repository.getBookmark(bookId)
+        // Memory hit is instant; the disk cache survives process death so a cold-start open of a
+        // large PDF is a fast read; only a miss on both pays for a full parse.
+        val parsed = books.inMemory(book) ?: books.fromDisk(book) ?: parseWithSpinner(book, generation)
+        if (parsed == null || generation != loadGeneration) return  // failed, or superseded
+        preferences.lastOpenedBookId = bookId
 
-        val signature = cacheSignature(book)
-        val cached = parseCache[bookId]?.takeIf { it.signature == signature }?.book
-        val parsed: Book = if (cached != null) {
-            // In-memory cache hit — no parse, no spinner. The switch is instant.
-            cached
-        } else {
-            // Disk cache survives process death, so a cold-start open of a large PDF is a fast
-            // read instead of a multi-second re-parse. Finished books aren't cached.
-            val diskChapters = if (book.isFinished) null else withContext(Dispatchers.IO) {
-                com.example.narrator.data.ParsedBookCache.read(parsedCacheDir, bookId, signature)
-            }
-            if (diskChapters != null) {
-                val p = Book(book.title, book.author, diskChapters, null, null)
-                cachePut(bookId, signature, p, book.isFinished)  // warm the in-memory cache too
-                p
-            } else {
-                // Surface a spinner immediately — PDF parsing of a large book can take a few
-                // seconds, and without feedback the tap into the Player looks like nothing happened.
-                _state.value = _state.value.copy(loading = true)
-                val p = try {
-                    withContext(Dispatchers.IO) { parseBookFile(File(book.epubPath), book) }
-                } catch (e: Exception) {
-                    android.util.Log.w("Narrator", "Failed to parse book $bookId at ${book.epubPath}", e)
-                    // Leave state unchanged so the player keeps whatever was previously loaded.
-                    _state.value = _state.value.copy(loading = false)
-                    return
-                }
-                cachePut(bookId, signature, p, book.isFinished)
-                if (!book.isFinished) withContext(Dispatchers.IO) {
-                    com.example.narrator.data.ParsedBookCache.write(parsedCacheDir, bookId, signature, p.chapters)
-                }
-                p
-            }
-        }
         chunksByChapter = parsed.chapters.map { it.chunks }
         val total = chunksByChapter.sumOf { it.size }
-        if (total != book.totalChunks) repository.updateTotalChunks(bookId, total)
-
         // Title/author/cover come from the DB row (user-editable), content from the parsed file.
         val loaded = LoadedBook.from(book, parsed, total)
-        val pos = if (bookmark != null) {
-            positionFor(loaded, bookmark.chapterIndex, bookmark.chunkIndex)
-        } else {
-            Position(0, 0, 0)
-        }
+        val pos = bookmark?.let { loaded.index.position(it.chapterIndex, it.chunkIndex) } ?: Position(0, 0, 0)
 
         pipeline?.stop()
         // The fresh NarratorState below resets sleepTimer to Off; cancel the countdown job too,
@@ -358,6 +307,24 @@ class Narrator(
         // Start prefetching as soon as the book is loaded so the first chunk is already
         // synthesised by the time the user presses play.
         primeFromCurrent(autoplay = false)
+        // After the state is applied: this suspends, and nothing below may depend on it.
+        if (total != book.totalChunks) repository.updateTotalChunks(bookId, total)
+    }
+
+    /** Full parse with the loading spinner up (a large PDF takes seconds). Null on failure, which
+     *  leaves the previously loaded book in place. The spinner is only cleared by the load that is
+     *  still current — a superseded one must not hide a newer load's spinner. */
+    private suspend fun parseWithSpinner(book: BookEntity, generation: Int): Book? {
+        _state.value = _state.value.copy(loading = true)
+        return try {
+            books.parse(book)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("Narrator", "Failed to parse book ${book.id} at ${book.epubPath}", e)
+            if (generation == loadGeneration) _state.value = _state.value.copy(loading = false)
+            null
+        }
     }
 
     /**
@@ -380,49 +347,20 @@ class Narrator(
         }
     }
 
-    private fun cacheSignature(book: BookEntity): String =
-        "${book.epubPath}|${book.pageRangeStart}|${book.pageRangeEnd}|${book.skipPatterns}"
-
-    private fun cachePut(bookId: Long, signature: String, book: Book, finished: Boolean) {
-        if (finished) {
-            parseCache.remove(bookId)
-            com.example.narrator.data.ParsedBookCache.delete(parsedCacheDir, bookId)
-            return
-        }
-        // Drop cover bytes before caching — the Player loads the cover from disk via coverPath,
-        // so the parsed Book's coverImage is dead weight that would bloat the cache.
-        parseCache[bookId] = CachedParse(signature, book.copy(coverImage = null, coverMimeType = null))
-    }
-
     /**
-     * Pre-parse the most recently-played, not-yet-finished books into [parseCache] so switching
-     * to one of them opens instantly. Runs in the background and never touches the TTS engine,
-     * so it can't disturb live playback — it only fills the parse cache. Parsing is sequential
-     * to stay gentle on a phone that may be mid-playback. Call after the repository has been
+     * Pre-load the most recently-played, not-yet-finished books so switching to one opens
+     * instantly. Never touches the TTS engine, so it can't disturb live playback; sequential to
+     * stay gentle on a phone that may be mid-playback. Call after the repository has been
      * refreshed (e.g. app startup).
      */
     fun warmRecentBooks() {
         scope.launch {
-            val recent = repository.books.value
-                .filterNot { it.book.isFinished }
-                .sortedByDescending { it.bookmark?.updatedAt ?: 0L }
-                .take(MAX_PARSE_CACHE)
-            for (bwp in recent) {
-                val book = bwp.book
-                val signature = cacheSignature(book)
-                if (parseCache[book.id]?.signature == signature) continue  // already warm
-                val parsed = withContext(Dispatchers.IO) {
-                    // Prefer the disk cache; only parse (and then persist) on a miss.
-                    com.example.narrator.data.ParsedBookCache.read(parsedCacheDir, book.id, signature)
-                        ?.let { Book(book.title, book.author, it, null, null) }
-                        ?: runCatching { parseBookFile(File(book.epubPath), book) }.getOrNull()
-                            ?.also {
-                                com.example.narrator.data.ParsedBookCache
-                                    .write(parsedCacheDir, book.id, signature, it.chapters)
-                            }
-                } ?: continue
-                cachePut(book.id, signature, parsed, book.isFinished)
-            }
+            books.warm(
+                repository.books.value
+                    .filterNot { it.book.isFinished }
+                    .sortedByDescending { it.bookmark?.updatedAt ?: 0L }
+                    .map { it.book },
+            )
         }
     }
 
@@ -432,8 +370,7 @@ class Narrator(
      * writing resume bookmarks for a book row that no longer exists.
      */
     fun forgetBook(bookId: Long) {
-        parseCache.remove(bookId)
-        com.example.narrator.data.ParsedBookCache.delete(parsedCacheDir, bookId)
+        books.forget(bookId)
         if (_state.value.loaded?.bookId == bookId) unload()
         if (preferences.lastOpenedBookId == bookId) preferences.lastOpenedBookId = -1L
     }
@@ -451,12 +388,10 @@ class Narrator(
     }
 
     /** After a successful restore: every parse cache is keyed by (now meaningless) book id. */
-    suspend fun discardParseCaches() {
-        parseCache.clear()
-        withContext(Dispatchers.IO) { parsedCacheDir.deleteRecursively() }
-    }
+    suspend fun discardParseCaches() = books.clear()
 
     private fun unload() {
+        loadGeneration++  // an in-flight loadBook must not re-load what we just dropped
         pipeline?.stop()
         cancelSleepTimerJob()
         pendingPlay = false
@@ -596,16 +531,6 @@ class Narrator(
         tts?.setPitch(preferences.pitch)
     }
 
-    fun applyVoiceFromPreferences() {
-        applyStoredVoice()
-    }
-
-    /** Current chunk's MediaPlayer position, in ms. 0 if no playback. */
-    fun playbackPositionMs(): Int = pipeline?.currentPositionMs() ?: 0
-
-    /** Current chunk's MediaPlayer total duration, in ms. 0 if not yet known. */
-    fun playbackDurationMs(): Int = pipeline?.currentDurationMs() ?: 0
-
     /** Monotonic highlight floor for the current sentence: the furthest char reached so far. The
      *  highlight never moves backward within a sentence — without this it snaps back to the start
      *  of a finished segment during the synth gap before the next segment plays. Reset to 0 on
@@ -662,7 +587,7 @@ class Narrator(
     fun seekToGlobalChunk(globalChunk: Int) {
         val s = _state.value
         val loaded = s.loaded ?: return
-        val target = positionFromGlobal(loaded, globalChunk.coerceIn(0, (loaded.totalChunks - 1).coerceAtLeast(0)))
+        val target = loaded.index.fromGlobal(globalChunk)
         val wasPlaying = s.isPlaying
         pipeline?.stop()
         _state.value = s.copy(position = target)
@@ -670,17 +595,6 @@ class Narrator(
         // Re-prime from the new position regardless of play state, so the next play is instant.
         primeFromCurrent(autoplay = wasPlaying)
         persistBookmark()
-    }
-
-    private fun positionFromGlobal(loaded: LoadedBook, global: Int): Position {
-        var remaining = global
-        for ((chapterIdx, count) in loaded.chapterChunkCounts.withIndex()) {
-            if (remaining < count) return Position(chapterIdx, remaining, global)
-            remaining -= count
-        }
-        val lastChapter = loaded.chapterChunkCounts.lastIndex.coerceAtLeast(0)
-        val lastChunk = (loaded.chapterChunkCounts.getOrNull(lastChapter) ?: 1) - 1
-        return positionFor(loaded, lastChapter, lastChunk.coerceAtLeast(0))
     }
 
     fun togglePlayPause() {
@@ -780,9 +694,9 @@ class Narrator(
         val wasPlaying = s.isPlaying
         pipeline?.stop()
         val newPos = when {
-            chapterDelta != 0 -> positionFor(loaded, s.position.chapterIndex + chapterDelta, 0)
-            chunkDelta > 0 -> advanceChunk(loaded, s.position, chunkDelta)
-            chunkDelta < 0 -> retreatChunk(loaded, s.position, -chunkDelta)
+            chapterDelta != 0 -> loaded.index.position(s.position.chapterIndex + chapterDelta, 0)
+            chunkDelta > 0 -> loaded.index.advance(s.position, chunkDelta)
+            chunkDelta < 0 -> loaded.index.retreat(s.position, -chunkDelta)
             else -> s.position
         }
         _state.value = s.copy(position = newPos)
@@ -792,49 +706,10 @@ class Narrator(
         persistBookmark()
     }
 
-    private fun advanceChunk(loaded: LoadedBook, p: Position, n: Int): Position {
-        var chapterIdx = p.chapterIndex
-        var chunkIdx = p.chunkIndex + n
-        while (chapterIdx < loaded.chapterChunkCounts.size &&
-            chunkIdx >= loaded.chapterChunkCounts[chapterIdx]
-        ) {
-            chunkIdx -= loaded.chapterChunkCounts[chapterIdx]
-            chapterIdx++
-        }
-        if (chapterIdx >= loaded.chapterChunkCounts.size) {
-            val lastChapter = loaded.chapterChunkCounts.lastIndex.coerceAtLeast(0)
-            val lastChunk = (loaded.chapterChunkCounts.getOrNull(lastChapter) ?: 1) - 1
-            return positionFor(loaded, lastChapter, lastChunk.coerceAtLeast(0))
-        }
-        return positionFor(loaded, chapterIdx, chunkIdx)
-    }
-
-    private fun retreatChunk(loaded: LoadedBook, p: Position, n: Int): Position {
-        var chapterIdx = p.chapterIndex
-        var chunkIdx = p.chunkIndex - n
-        while (chunkIdx < 0 && chapterIdx > 0) {
-            chapterIdx--
-            chunkIdx += loaded.chapterChunkCounts[chapterIdx]
-        }
-        if (chunkIdx < 0) chunkIdx = 0
-        return positionFor(loaded, chapterIdx, chunkIdx)
-    }
-
-    private fun positionFor(loaded: LoadedBook, chapterIdx: Int, chunkIdx: Int): Position {
-        val lastChapter = loaded.chapterTitles.lastIndex.coerceAtLeast(0)
-        val safeChapter = chapterIdx.coerceIn(0, lastChapter)
-        val chapterSize = loaded.chapterChunkCounts.getOrNull(safeChapter) ?: 1
-        val safeChunk = chunkIdx.coerceIn(0, (chapterSize - 1).coerceAtLeast(0))
-        val global = loaded.chapterChunkCounts.take(safeChapter).sum() + safeChunk
-        return Position(safeChapter, safeChunk, global)
-    }
-
     private fun queueAheadCount(from: Position, count: Int) {
-        val loaded = _state.value.loaded ?: return
-        var pos = from
-        repeat(count) { i ->
-            val next = advanceChunk(loaded, pos, 1)
-            if (next == pos) return
+        val index = _state.value.loaded?.index ?: return
+        for (i in 0 until count) {
+            val next = index.ahead(from, i + 1) ?: return
             val text = chunkTextAt(next) ?: return
             // Distance from the head grows 1..count; deeper = more buffered = cut less.
             val budget = Sentences.budgetForDepth(i + 1)
@@ -842,20 +717,7 @@ class Narrator(
                 segmentsFor(text, budget),
                 utteranceId(next), next.chapterIndex, isChapterTitlePosition(next),
             )
-            pos = next
         }
-    }
-
-    /** Position [ahead] chunks past [from], or null if past the end. */
-    private fun positionAhead(from: Position, ahead: Int): Position? {
-        val loaded = _state.value.loaded ?: return null
-        var pos = from
-        repeat(ahead) {
-            val next = advanceChunk(loaded, pos, 1)
-            if (next == pos) return null
-            pos = next
-        }
-        return pos
     }
 
     internal companion object {
@@ -863,8 +725,6 @@ class Narrator(
         // 0.11 sentence-cutting change, each synth is faster, so keeping more ready ahead of
         // the playhead smooths transitions and absorbs the occasional slow chunk.
         const val PREFETCH_DEPTH = 4
-        /** Number of recently-read, non-finished books whose parse is kept warm in memory. */
-        const val MAX_PARSE_CACHE = 5
         /** A chapter's first chunk is treated as its spoken heading only if it's at most this
          *  long — guards the post-title pause against firing after a long opening sentence. */
         const val TITLE_MAX_CHARS = 80
@@ -951,8 +811,7 @@ class Narrator(
         val s = _state.value
         val loaded = s.loaded ?: return
         val current = chunkTextAt(s.position).orEmpty()
-        val nextPos = advanceChunk(loaded, s.position, 1)
-        val next = if (nextPos != s.position) chunkTextAt(nextPos).orEmpty() else ""
+        val next = loaded.index.ahead(s.position, 1)?.let { chunkTextAt(it) }.orEmpty()
         // New sentence on screen → restart the monotonic highlight floor and timing sample.
         highlightFloorChars = 0
         statsSampleTainted = false
@@ -969,8 +828,8 @@ class Narrator(
         // REPLAYED that sentence. Advancing unconditionally keeps the two in sync; while paused
         // nothing starts playing (the prefetch below just banks audio) until the user resumes.
         recordTimingSample(s)
-        val nextPos = advanceChunk(loaded, s.position, 1)
-        if (nextPos == s.position) {
+        val nextPos = loaded.index.ahead(s.position, 1)
+        if (nextPos == null) {
             // End of book: stop and auto-mark finished so the library shows 100% (the playhead
             // only ever reaches the last sentence index = ~99%, so without this a fully-read book
             // sticks below 100). Mirrors the manual "mark as finished" toggle. A real pause() so
@@ -1009,7 +868,7 @@ class Narrator(
 
     /** Top the prefetch buffer back up with the sentence PREFETCH_DEPTH ahead of [head]. */
     private fun queuePrefetchTail(head: Position) {
-        val tail = positionAhead(head, PREFETCH_DEPTH) ?: return
+        val tail = _state.value.loaded?.index?.ahead(head, PREFETCH_DEPTH) ?: return
         val text = chunkTextAt(tail) ?: return
         // Tail sits PREFETCH_DEPTH sentences ahead — a full buffer — so read it whole.
         pipeline?.queueSentence(
@@ -1045,30 +904,5 @@ class Narrator(
         tts?.stop()
         tts?.shutdown()
         tts = null
-    }
-
-    /** Picks the parser by source file extension. Books are stored on disk with their
-     *  original extension preserved, so the source format is recoverable at load time.
-     *  Applies the per-book page range (PDF only) and skip-pattern filter. */
-    private fun parseBookFile(file: File, book: com.example.narrator.data.BookEntity): Book {
-        val ext = file.extension.lowercase()
-        val raw = when (ext) {
-            "pdf" -> {
-                val range = if (book.pageRangeStart > 0 && book.pageRangeEnd >= book.pageRangeStart)
-                    book.pageRangeStart..book.pageRangeEnd else null
-                PdfParser.parse(file, range, includeCover = false)
-            }
-            else -> EpubParser.parse(file)
-        }
-        val patterns = book.skipPatterns.lines()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .mapNotNull { runCatching { Regex(it) }.getOrNull() }
-        if (patterns.isEmpty()) return raw
-        // Drop any chunk that matches any skip pattern.
-        val filteredChapters = raw.chapters.map { ch ->
-            ch.copy(chunks = ch.chunks.filterNot { chunk -> patterns.any { it.containsMatchIn(chunk) } })
-        }.filter { it.chunks.isNotEmpty() }
-        return raw.copy(chapters = filteredChapters)
     }
 }

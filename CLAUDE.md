@@ -13,7 +13,9 @@ Fairphone but works on any Android 8.0+ device.
 
 ## Package layout
 
-- `com.example.narrator` — Application class + `MainActivity` + container DI.
+- `com.example.narrator` — Application class + `MainActivity` + container DI
+  (`AppContainer.appScope` for work that must outlive a screen), `CoverCache`
+  (shared downscaled cover bitmaps — never `BitmapFactory.decodeFile` a cover directly).
 - `com.example.narrator.epub` — EPUB parser, sentence splitter (`Sentences`) used
   by both parsers, HTML→text helpers.
 - `com.example.narrator.pdf` — PDFBox-Android based parser + `TextCleaner` for
@@ -23,7 +25,10 @@ Fairphone but works on any Android 8.0+ device.
   can be unit-tested without an Android context).
 - `com.example.narrator.tts` — `Narrator` (state machine + StateFlow), `FilePipeline`
   (synth-to-WAV + MediaPlayer queue), `NarrationService` (foreground media session),
-  `VoicePreferences`.
+  `VoicePreferences`, `BookIndex` (ALL chapter/chunk ↔ global position math — use
+  `loadedBook.index`, don't re-sum `chapterChunkCounts`), `ParsedBookStore` (memory LRU →
+  disk `ParsedBookCache` → parse; bump `ParsedBookCache.PARSER_VERSION` when parser output
+  or the cache format changes).
 - `com.example.narrator.ui.{library,player,settings,about,voicesetup}` — fragments
   + helpers per tab.
 

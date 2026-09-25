@@ -35,11 +35,6 @@ class BookAdapter(
 
     fun selectedIds(): Set<Long> = selectedIds.toSet()
 
-    fun clearSelection() {
-        selectedIds.clear()
-        notifyItemRangeChanged(0, itemCount)
-    }
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding = ItemBookBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return ViewHolder(binding)

@@ -197,13 +197,8 @@ class PlayerFragment : Fragment() {
 
         val total = (loaded.totalChunks - 1).coerceAtLeast(0)
         binding.playerScrub.max = total
-        // Chapter boundary dots — running totals of chunks before each chapter, drop the
-        // leading 0 (start of book; the thumb already conveys that) and the trailing total.
-        val chapterStarts = loaded.chapterChunkCounts
-            .runningFold(0) { acc, n -> acc + n }
-            .drop(1)
-            .dropLast(1)
-        binding.playerScrub.setChapterStarts(chapterStarts)
+        // Chapter boundary dots: where chapters 2..N begin (chapter 1 starts at the thumb's 0).
+        binding.playerScrub.setChapterStarts(loaded.index.chapterBoundaries())
         if (!scrubbing) {
             binding.playerScrub.progress = state.position.globalChunk.coerceIn(0, total)
             updateProgressText(state.position.globalChunk, total)
@@ -501,8 +496,7 @@ class PlayerFragment : Fragment() {
         val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.player_chapter_dialog_title)
             .setSingleChoiceItems(labels, state.position.chapterIndex) { d, which ->
-                val start = loaded.chapterChunkCounts.take(which).sum()
-                container.narrator.seekToGlobalChunk(start)
+                container.narrator.seekToGlobalChunk(loaded.index.chapterStart(which))
                 d.dismiss()
             }
             .setNegativeButton(R.string.bookmarks_close, null)
@@ -512,14 +506,13 @@ class PlayerFragment : Fragment() {
         // jumping to it. Matches the existing long-press-to-delete pattern in the
         // bookmarks dialog.
         dialog.listView?.setOnItemLongClickListener { _, _, which, _ ->
-            val start = loaded.chapterChunkCounts.take(which).sum()
-            val (chapter, chunk) = chapterAndLocalChunkFor(loaded, start)
+            val start = loaded.index.position(which, 0)
             viewLifecycleOwner.lifecycleScope.launch {
                 container.bookRepository.addBookmark(
                     bookId = loaded.bookId,
-                    chapterIndex = chapter,
-                    chunkIndex = chunk,
-                    globalChunk = start,
+                    chapterIndex = start.chapterIndex,
+                    chunkIndex = start.chunkIndex,
+                    globalChunk = start.globalChunk,
                     label = null,
                 )
                 Toast.makeText(
@@ -530,20 +523,6 @@ class PlayerFragment : Fragment() {
             }
             true
         }
-    }
-
-    /** Resolve (chapterIndex, localChunkIndex) for a global chunk position. Used by
-     *  long-press-to-bookmark in the chapter navigator. */
-    private fun chapterAndLocalChunkFor(
-        loaded: com.example.narrator.tts.LoadedBook,
-        globalChunk: Int,
-    ): Pair<Int, Int> {
-        var remaining = globalChunk
-        for ((i, count) in loaded.chapterChunkCounts.withIndex()) {
-            if (remaining < count) return i to remaining
-            remaining -= count
-        }
-        return (loaded.chapterChunkCounts.size - 1).coerceAtLeast(0) to 0
     }
 
     private fun openSleepDialog() {
